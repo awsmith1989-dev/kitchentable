@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Student, WeeklyGpaSnapshot, WeeklyClassGrade, WeeklyAttendance, ClassRecord } from '../lib/types';
+import { SelfAssessment, Student, WeeklyGpaSnapshot, WeeklyClassGrade, WeeklyAttendance, ClassRecord } from '../lib/types';
+import { PathToTargetResult } from './StudentView';
 
 interface AdvisorInsightsProps {
   student: Student;
@@ -8,6 +9,9 @@ interface AdvisorInsightsProps {
   weeklyAttendance: WeeklyAttendance[];
   classes: ClassRecord[];
   activeYear: string;
+  schoolState: string;
+  selfAssessment: SelfAssessment | null;
+  pathToTarget?: PathToTargetResult | null;
 }
 
 export default function AdvisorInsights({
@@ -16,7 +20,10 @@ export default function AdvisorInsights({
   weeklyGrades,
   weeklyAttendance,
   classes,
-  activeYear
+  activeYear,
+  schoolState,
+  selfAssessment,
+  pathToTarget,
 }: AdvisorInsightsProps) {
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,66 +32,125 @@ export default function AdvisorInsights({
   const generateInsight = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      // Get GPA trend
+      // GPA trend
       const snapshots = weeklyGpa
-        .filter((row) => row.school_year === activeYear)
-        .sort((a, b) => b.week_number - a.week_number);
-      
-      const latestGpa = snapshots[0]?.gpa;
-      const previousGpa = snapshots[1]?.gpa;
-      const gpaTrend = latestGpa && previousGpa 
-        ? latestGpa > previousGpa ? 'growing' : latestGpa < previousGpa ? 'declining' : 'stable'
-        : 'unknown';
+        .filter((row) => row.student_id === student.id && row.school_year === activeYear)
+        .sort((a, b) => a.week_number - b.week_number);
 
-      // Get best and worst subjects
-      const gradesByClass = new Map<string, number[]>();
-      const currentWeekGrades = weeklyGrades.filter((g) => g.school_year === activeYear);
-      const latestWeek = Math.max(0, ...currentWeekGrades.map((g) => g.week_number));
+      const latestGpa = snapshots[snapshots.length - 1]?.gpa ?? null;
+      const previousGpa = snapshots[snapshots.length - 2]?.gpa ?? null;
+      const gpaTrend =
+        latestGpa !== null && previousGpa !== null
+          ? latestGpa > previousGpa
+            ? 'growing'
+            : latestGpa < previousGpa
+              ? 'declining'
+              : 'stable'
+          : 'stable';
 
-      currentWeekGrades
-        .filter((g) => g.week_number === latestWeek)
-        .forEach((g) => {
-          const subject = classes.find((c) => c.id === g.class_id)?.subject || 'Unknown';
-          const grade = g.grade_points ?? 0;
-          if (!gradesByClass.has(subject)) gradesByClass.set(subject, []);
-          gradesByClass.get(subject)!.push(grade);
+      // Attendance — most recent week with data
+      const studentAttendance = weeklyAttendance.filter(
+        (row) => row.student_id === student.id && row.school_year === activeYear
+      );
+      const latestAttendanceWeek = studentAttendance.reduce((max, r) => Math.max(max, r.week_number), 0);
+      const absencesThisWeek = studentAttendance
+        .filter((r) => r.week_number === latestAttendanceWeek)
+        .reduce((sum, r) => sum + Number(r.absent_days), 0);
+      const attendanceSummary =
+        latestAttendanceWeek === 0
+          ? 'no attendance data yet'
+          : absencesThisWeek >= 5
+            ? 'high absences this week'
+            : absencesThisWeek === 0
+              ? 'near-perfect attendance'
+              : 'a few missed days this week';
+
+      // Subject performance — only include if we have real week-over-week data
+      const studentGrades = weeklyGrades.filter(
+        (g) => g.student_id === student.id && g.school_year === activeYear
+      );
+      const latestGradeWeek = studentGrades.reduce((max, g) => Math.max(max, g.week_number), 0);
+      const subjectNotes: string[] = [];
+
+      if (latestGradeWeek > 0) {
+        const currentWeek = studentGrades.filter((g) => g.week_number === latestGradeWeek);
+        const prevWeek = studentGrades.filter((g) => g.week_number === latestGradeWeek - 1);
+
+        currentWeek.forEach((row) => {
+          const cls = classes.find((c) => c.id === row.class_id);
+          const subjectName = cls?.subject || cls?.name;
+          if (!subjectName || row.grade_points == null) return;
+          const prev = prevWeek.find((p) => p.class_id === row.class_id);
+          if (prev?.grade_points == null) return;
+          const delta = row.grade_points - prev.grade_points;
+          if (delta > 0) subjectNotes.push(`${subjectName} improving`);
+          else if (delta < 0) subjectNotes.push(`${subjectName} declining`);
         });
+      }
 
-      const subjectAverages = Array.from(gradesByClass.entries()).map(([subject, grades]) => ({
-        subject,
-        avg: grades.reduce((a, b) => a + b, 0) / grades.length
-      }));
+      const postSecondaryPlans = student.post_secondary_plans?.length
+        ? student.post_secondary_plans.join(', ')
+        : 'not specified';
 
-      const bestSubject = subjectAverages.sort((a, b) => b.avg - a.avg)[0]?.subject || 'a subject';
-      const worstSubject = subjectAverages.sort((a, b) => a.avg - b.avg)[0]?.subject || 'an area';
+      const subjectLine = subjectNotes.length > 0
+        ? `Subject changes this week: ${subjectNotes.join(', ')}.`
+        : '';
 
-      // Get attendance
-      const totalAbsences = weeklyAttendance.reduce((sum, row) => sum + Number(row.absent_days), 0);
+      const academicLabel = selfAssessment?.academic_self_assessment === 'better' ? 'better than last week'
+        : selfAssessment?.academic_self_assessment === 'same' ? 'about the same as last week'
+        : selfAssessment?.academic_self_assessment === 'worse' ? 'not their best week (student self-reported)'
+        : null;
+      const selfAssessmentLine = selfAssessment
+        ? `Student self-assessment (Week ${selfAssessment.week_number}): academic — ${academicLabel}; effort rating — ${selfAssessment.effort_rating}/5.`
+        : '';
 
-      // Build prompt
-      const prompt = `Generate a warm, encouraging AI-generated advisor insight for a student. Speak directly to them in second person. Include:
+      const strengthsLine = student.strengths?.length
+        ? `Identified strengths: ${student.strengths.join(', ')}.`
+        : '';
 
-Student Name: ${student.first_name}
-Current GPA Trend: ${gpaTrend} (${latestGpa?.toFixed(2) ?? 'N/A'})
-Strongest Subject: ${bestSubject}
-Biggest Opportunity: ${worstSubject}
-Total Absences This Semester: ${totalAbsences}
-Post-Secondary Plans: ${student.post_secondary_plans?.join(', ') || 'Not specified yet'}
-Interests: ${student.interests || 'Not specified yet'}
+      const latestGpaSnap = weeklyGpa
+        .filter((r) => r.school_year === activeYear)
+        .sort((a, b) => b.week_number - a.week_number)[0];
 
-Instructions:
-- Speak in second person directly to the student (e.g., "You're showing strong growth...")
-- Lead with a strength or something to celebrate
-- Connect their academic data to their post-secondary plans and interests where relevant
-- Use warm, encouraging, asset-based language — never shame or deficit framing
-- Give one specific, actionable suggestion
-- Keep the response to 3-4 sentences maximum
-- Never mention specific grade numbers or GPA values — speak in terms of trends and strengths
-- Make it feel personal and supportive
+      const hasTarget = !!(pathToTarget && pathToTarget.gapToClose > 0 && pathToTarget.recommendations.length > 0);
 
-Generate the insight now:`;
+      const pathContext = hasTarget && pathToTarget
+        ? [
+            `Student's target GPA: ${latestGpaSnap ? (Number(latestGpaSnap.gpa) + pathToTarget.gapToClose).toFixed(2) : 'set'}`,
+            `Gap to close: ${pathToTarget.gapToClose.toFixed(2)} GPA points`,
+            `Recommended focus classes:`,
+            ...pathToTarget.recommendations.map((r, i) =>
+              `${i + 1}. ${r.className} — currently ${r.currentGrade}, targeting ${r.targetGrade}. ${r.reason}`
+            ),
+          ].join('\n')
+        : '';
+
+      const prompt = `Write a 3–4 sentence advisor reflection for ${student.first_name}, addressed directly to them in second person. Do not include a title, heading, or any markdown formatting — plain prose only.
+
+${hasTarget
+  ? `The student has set a target GPA. Make the insight specifically about their path to that goal. Name the 1–2 classes where focused effort will move the needle most. Be concrete — tell them exactly what moving their grade in a specific class would mean for their overall trajectory. Frame it as achievable and within reach. Never make the goal sound out of reach.`
+  : `The reflection has two parts:\n1. A warm, specific observation about their current academic progress this year (GPA trend, attendance, and any notable subject shifts). If a self-assessment is provided, weave it in naturally. If strengths are listed, call out at least one by name.\n2. One or two sentences connecting their interests and strengths to real career paths or post-secondary options in ${schoolState || 'their state'}.`
+}
+
+Student data:
+- GPA trend this year: ${gpaTrend}
+- Attendance: ${attendanceSummary}
+${subjectLine}
+${selfAssessmentLine}
+${strengthsLine}
+${pathContext}
+- Interests: ${student.interests || 'not specified'}
+- Post-secondary plans: ${postSecondaryPlans}
+- School state: ${schoolState || 'not specified'}
+
+Rules:
+- Never mention raw GPA numbers or letter grades
+- No title, no heading, no bullet points, no markdown — flowing prose only
+- Use "you" and "your" throughout
+- Name real career fields or institutions in ${schoolState || 'their state'} where relevant
+- 3–4 sentences total`;
 
       const response = await fetch('/.netlify/functions/advisor-insight', {
         method: 'POST',
@@ -107,7 +173,12 @@ Generate the insight now:`;
         typeof data.completion === 'string' ? data.completion :
         null;
 
-      setInsight(insightText?.trim() || 'Unable to generate insight at this time.');
+      // Strip any leading markdown heading the model might add despite instructions
+      const cleaned = insightText
+        ?.replace(/^#+\s+[^\n]*\n+/, '')
+        .trim();
+
+      setInsight(cleaned || 'Unable to generate insight at this time.');
     } catch (err: any) {
       setError(err.message || 'An error occurred while generating the insight.');
       setInsight(null);

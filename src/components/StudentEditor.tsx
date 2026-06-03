@@ -12,6 +12,13 @@ interface StudentEditorProps {
 
 const postSecondaryOptions = ['Straight to Work', 'Military', 'Trade School / Vocational', '2-Year College', '4-Year College'];
 
+const strengthCategories = [
+  { label: 'Character', items: ['Determined', 'Resilient', 'Compassionate', 'Honest', 'Courageous', 'Humble', 'Patient', 'Generous'] },
+  { label: 'Academic',  items: ['Creative thinker', 'Strong writer', 'Problem solver', 'Critical thinker', 'Detail oriented', 'Quick learner', 'Great listener', 'Asks great questions'] },
+  { label: 'Social',    items: ['Natural leader', 'Team player', 'Peacemaker', 'Great communicator', 'Empathetic', 'Dependable', 'Encouraging', 'Inclusive'] },
+  { label: 'Unique',    items: ['Hard worker', 'Never gives up', 'Shows up every day', 'Lifts others up', 'Has a big heart', 'Sees the big picture', 'Thinks outside the box', 'Makes people feel welcome'] },
+];
+
 export default function StudentEditor({ advisoryClass, schoolId, studentToEdit, onClose, onSaved }: StudentEditorProps) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -19,6 +26,7 @@ export default function StudentEditor({ advisoryClass, schoolId, studentToEdit, 
   const [targetGpa, setTargetGpa] = useState('');
   const [postSecondaryPlans, setPostSecondaryPlans] = useState<string[]>([]);
   const [interests, setInterests] = useState('');
+  const [strengths, setStrengths] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +38,7 @@ export default function StudentEditor({ advisoryClass, schoolId, studentToEdit, 
       setTargetGpa(studentToEdit.target_gpa?.toFixed(2) ?? '');
       setPostSecondaryPlans(studentToEdit.post_secondary_plans ?? []);
       setInterests(studentToEdit.interests ?? '');
+      setStrengths(studentToEdit.strengths ?? []);
     } else {
       setFirstName('');
       setLastName('');
@@ -37,6 +46,7 @@ export default function StudentEditor({ advisoryClass, schoolId, studentToEdit, 
       setTargetGpa('');
       setPostSecondaryPlans([]);
       setInterests('');
+      setStrengths([]);
     }
     setError(null);
   }, [studentToEdit]);
@@ -55,6 +65,7 @@ export default function StudentEditor({ advisoryClass, schoolId, studentToEdit, 
       target_gpa: targetGpa.trim() === '' ? null : Number(targetGpa),
       post_secondary_plans: postSecondaryPlans.length > 0 ? postSecondaryPlans : null,
       interests: interests.trim() || null,
+      strengths: strengths.length > 0 ? strengths : [],
       school_id: schoolId,
       advisory_class_id: advisoryClass?.id ?? null,
       status: 'active'
@@ -175,6 +186,38 @@ export default function StudentEditor({ advisoryClass, schoolId, studentToEdit, 
           className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-slate-300 focus:outline-none"
         />
       </label>
+
+      <div className="mt-6 space-y-4">
+        <p className="text-sm font-medium text-slate-700">
+          Strengths
+          {strengths.length > 0 && (
+            <span className="ml-2 text-xs font-normal text-slate-400">{strengths.length} selected</span>
+          )}
+        </p>
+        {strengthCategories.map((category) => (
+          <div key={category.label}>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{category.label}</p>
+            <div className="flex flex-wrap gap-2">
+              {category.items.map((strength) => (
+                <button
+                  key={strength}
+                  type="button"
+                  onClick={() => setStrengths((prev) =>
+                    prev.includes(strength) ? prev.filter((s) => s !== strength) : [...prev, strength]
+                  )}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    strengths.includes(strength)
+                      ? 'bg-slate-900 text-white'
+                      : 'border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {strength}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div className="mt-6 flex justify-end">
         <button

@@ -2,6 +2,7 @@ export interface School {
   id: string;
   name: string;
   district?: string;
+  state?: string;
   semester_weeks: number;
   semester_start_date: string;
   timezone?: string;
@@ -44,6 +45,7 @@ export interface Student {
   target_gpa?: number;
   post_secondary_plans?: string[];
   interests?: string;
+  strengths?: string[];
   status: string;
   created_at: string;
   updated_at: string;
@@ -81,6 +83,16 @@ export interface WeeklyClassGrade {
   grade_points?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface SelfAssessment {
+  id: string;
+  student_id: string;
+  school_year: string;
+  week_number: number;
+  academic_self_assessment: 'better' | 'same' | 'worse';
+  effort_rating: number;
+  created_at: string;
 }
 
 export interface WeeklyAttendance {

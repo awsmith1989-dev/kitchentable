@@ -30,8 +30,8 @@ export default function LoginForm() {
       <div className="mx-auto w-full max-w-md rounded-3xl bg-white p-8 shadow-xl ring-1 ring-slate-200">
         <div className="mb-8 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">The Kitchen Table</p>
-          <h1 className="mt-3 text-3xl font-semibold text-slate-900">Advisor login</h1>
-          <p className="mt-2 text-sm text-slate-500">Sign in with your school credentials to access advisory dashboards.</p>
+          <h1 className="mt-3 text-3xl font-semibold text-slate-900">Sign in</h1>
+          <p className="mt-2 text-sm text-slate-500">Sign in with your school credentials.</p>
         </div>
 
         <form className="space-y-6" onSubmit={handleSubmit}>
