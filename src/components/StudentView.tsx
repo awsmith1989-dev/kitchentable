@@ -4,8 +4,11 @@ import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tool
 import AnimatedDot from './AnimatedDot';
 import AdvisorInsights from './AdvisorInsights';
 import SelfAssessmentModal from './SelfAssessmentModal';
+import ThemeToggle from './ThemeToggle';
 import { supabase } from '../lib/supabaseClient';
-import { ClassRecord, School, SelfAssessment, Student, WeeklyAttendance, WeeklyClassGrade, WeeklyGpaSnapshot } from '../lib/types';
+import { useTheme } from '../lib/ThemeContext';
+import { ClassRecord, School, SelfAssessment, Student, StudentShoutout, WeeklyAttendance, WeeklyClassGrade, WeeklyGpaSnapshot } from '../lib/types';
+import { SHOUTOUT_CONFIG } from './ShoutoutModal';
 
 type ColorScheme = 'streak' | 'attendance' | 'gpa' | 'fallback';
 
@@ -47,12 +50,10 @@ function getCelebration({
 }: CelebrationInput): Celebration {
   const name = student.preferred_name || student.first_name;
 
-  // --- GPA snapshots sorted chronologically ---
   const gpaSnapshots = weeklyGpa
     .filter((r) => r.school_year === activeYear)
     .sort((a, b) => a.week_number - b.week_number);
 
-  // --- Absences by week ---
   const absencesByWeek = new Map<number, number>();
   attendance
     .filter((r) => r.school_year === activeYear)
@@ -60,7 +61,6 @@ function getCelebration({
       absencesByWeek.set(r.week_number, (absencesByWeek.get(r.week_number) ?? 0) + Number(r.absent_days));
     });
 
-  // --- Grades by class, sorted chronologically ---
   const gradesByClass = new Map<string, { subject: string; history: { week: number; value: number }[] }>();
   weeklyGrades
     .filter((g) => g.school_year === activeYear)
@@ -75,14 +75,10 @@ function getCelebration({
     });
   gradesByClass.forEach((entry) => entry.history.sort((a, b) => a.week - b.week));
 
-  // --- Latest self-assessment ---
   const latestAssessment = selfAssessments
     .filter((a) => a.school_year === activeYear)
     .sort((a, b) => b.week_number - a.week_number)[0] ?? null;
 
-  // ── TIER 1: Streaks ──────────────────────────────────────────
-
-  // GPA streak
   let gpaStreak = 0;
   for (let i = gpaSnapshots.length - 1; i > 0; i--) {
     if (Number(gpaSnapshots[i].gpa) > Number(gpaSnapshots[i - 1].gpa)) gpaStreak++;
@@ -95,7 +91,6 @@ function getCelebration({
     colorScheme: 'streak',
   };
 
-  // Perfect attendance streak
   let attendanceStreak = 0;
   for (let w = currentWeekNumber; w >= 1; w--) {
     const absences = absencesByWeek.get(w);
@@ -110,7 +105,6 @@ function getCelebration({
     colorScheme: 'attendance',
   };
 
-  // Subject improvement streak
   let bestSubjectStreak = { subject: '', streak: 0 };
   for (const { subject, history } of gradesByClass.values()) {
     let streak = 0;
@@ -126,8 +120,6 @@ function getCelebration({
     subtext: `Something is clicking in ${bestSubjectStreak.subject}. Keep doing what you're doing.`,
     colorScheme: 'streak',
   };
-
-  // ── TIER 2: This week's wins ──────────────────────────────────
 
   const latestGpaSnap = gpaSnapshots[gpaSnapshots.length - 1] ?? null;
   const prevGpaSnap = gpaSnapshots[gpaSnapshots.length - 2] ?? null;
@@ -168,8 +160,6 @@ function getCelebration({
     colorScheme: 'streak',
   };
 
-  // ── TIER 3: Semester wins ─────────────────────────────────────
-
   const weekOneSnap = gpaSnapshots.find((r) => r.week_number === 1) ?? null;
   if (latestGpaSnap && weekOneSnap && Number(latestGpaSnap.gpa) > Number(weekOneSnap.gpa)) {
     const growth = (Number(latestGpaSnap.gpa) - Number(weekOneSnap.gpa)).toFixed(2);
@@ -202,8 +192,6 @@ function getCelebration({
     };
   }
 
-  // ── TIER 4: Fallback ──────────────────────────────────────────
-
   const weeksLeft = Math.max(0, semesterWeeks - currentWeekNumber);
   return {
     emoji: '📅',
@@ -213,11 +201,11 @@ function getCelebration({
   };
 }
 
-const celebrationStyles: Record<ColorScheme, string> = {
-  streak:     'from-amber-500 to-orange-500',
-  attendance: 'from-teal-500 to-cyan-600',
-  gpa:        'from-emerald-500 to-teal-600',
-  fallback:   'from-slate-600 to-slate-700',
+const celebrationGradients: Record<ColorScheme, { light: string; dark: string }> = {
+  streak:     { light: 'from-amber-500 to-orange-500',   dark: 'from-amber-600 to-orange-600' },
+  attendance: { light: 'from-teal-500 to-cyan-600',      dark: 'from-teal-600 to-cyan-700' },
+  gpa:        { light: 'from-emerald-500 to-teal-600',   dark: 'from-emerald-600 to-teal-700' },
+  fallback:   { light: 'from-slate-600 to-slate-700',    dark: 'from-slate-500 to-slate-600' },
 };
 
 // ─── calculatePathToTarget ───────────────────────────────────────────────────
@@ -300,66 +288,115 @@ export function calculatePathToTarget(
   };
 }
 
-// ─── DraggableTargetLine (Recharts Customized component) ─────────────────────
+// ─── ProjectionLine (Recharts Customized component) ─────────────────────────
 
-function DraggableTargetLine(props: any) {
+function ProjectionLine(props: any) {
   const {
-    yAxisMap, offset,
-    displayGpa, isDragging, saveStatus,
-    onPointerDown, yScaleRef, chartOffsetRef,
+    xAxisMap, yAxisMap, offset,
+    lastGpaPoint, semesterWeeks,
+    localTargetGpa, isDragging, pendingTargetGpa,
+    dragSvgX, dragSvgY,
+    saveStatus, isHandleHovering,
+    onHandlePointerDown, onHandlePointerEnter, onHandlePointerLeave,
+    yScaleRef, chartOffsetRef,
   } = props;
 
   const yAxis = Object.values(yAxisMap ?? {})[0] as any;
-  if (!yAxis?.scale) return null;
+  const xAxis = Object.values(xAxisMap ?? {})[0] as any;
+  if (!yAxis?.scale || !xAxis?.scale || !lastGpaPoint) return null;
 
-  // Side-effect during render: expose scale + offset to parent pointer handlers
   yScaleRef.current = yAxis.scale;
   chartOffsetRef.current = offset;
 
-  const y = yAxis.scale(displayGpa);
-  if (!Number.isFinite(y)) return null;
+  const bw = xAxis.scale.bandwidth?.() ?? 0;
+  const scaleX = (week: number) => {
+    const pos = xAxis.scale(week) ?? xAxis.scale(String(week));
+    return (typeof pos === 'number' ? pos : NaN) + bw / 2;
+  };
 
-  const x1 = offset.left;
-  const x2 = offset.left + offset.width;
+  const x0 = scaleX(lastGpaPoint.week_number);
+  const y0 = yAxis.scale(lastGpaPoint.gpa);
+  if (!Number.isFinite(x0) || !Number.isFinite(y0)) return null;
+
+  const xEnd = scaleX(semesterWeeks);
+
+  const displayTarget = isDragging
+    ? (pendingTargetGpa ?? (localTargetGpa > 0 ? localTargetGpa : null))
+    : (localTargetGpa > 0 ? localTargetGpa : null);
+  const hasTarget = displayTarget !== null;
+  const yEnd = hasTarget ? yAxis.scale(displayTarget!) : null;
 
   return (
     <g>
-      {/* Line + handle group, CSS-transitioned for spring snap on release */}
-      <g
-        transform={`translate(0, ${y})`}
-        style={{ transition: isDragging ? 'none' : 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-      >
+      {hasTarget && !isDragging && yEnd !== null && (
         <line
-          x1={x1} y1={0} x2={x2} y2={0}
-          stroke="#f59e0b" strokeWidth={isDragging ? 2.5 : 2}
-          strokeDasharray="6 4"
+          x1={x0} y1={y0} x2={xEnd} y2={yEnd}
+          stroke="#f59e0b" strokeWidth={2} strokeDasharray="7 4" opacity={0.9}
           style={{ pointerEvents: 'none' }}
         />
-        {/* Floating label while dragging */}
-        {isDragging && (
-          <g>
-            <rect x={x1 + 4} y={-20} width={54} height={17} rx={4} fill="#f59e0b" />
-            <text x={x1 + 31} y={-7} fill="white" fontSize={11} fontWeight="bold" textAnchor="middle">
-              {displayGpa.toFixed(2)}
-            </text>
-          </g>
-        )}
-        {/* Bullseye drag handle */}
+      )}
+
+      {isDragging && dragSvgX != null && dragSvgY != null && (
+        <line
+          x1={x0} y1={y0} x2={dragSvgX} y2={dragSvgY}
+          stroke="#f59e0b" strokeWidth={2.5} strokeDasharray="7 4"
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
+
+      {hasTarget && !isDragging && yEnd !== null && Number.isFinite(xEnd) && (
         <g
-          style={{ cursor: 'ns-resize', touchAction: 'none' }}
-          onPointerDown={onPointerDown}
+          transform={`translate(${xEnd}, ${yEnd})`}
+          style={{ transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
         >
-          <circle cx={x2 + 18} cy={0} r={14} fill="#fbbf24" />
-          <circle cx={x2 + 18} cy={0} r={7} fill="white" />
-          <circle cx={x2 + 18} cy={0} r={3} fill="#f59e0b" />
+          <circle r={13} fill="#fbbf24" />
+          <circle r={7} fill="white" />
+          <circle r={3} fill="#f59e0b" />
+          {saveStatus === 'saved' && (
+            <circle r={13} fill="none" stroke="#f59e0b" strokeWidth={2.5}>
+              <animate attributeName="r" values="13;24;13" dur="0.6s" />
+              <animate attributeName="opacity" values="0.9;0;0" dur="0.6s" />
+            </circle>
+          )}
+          <rect x={-32} y={-28} width={64} height={18} rx={4} fill="#f59e0b" />
+          <text x={0} y={-15} fill="white" fontSize={11} fontWeight="bold" textAnchor="middle">
+            Goal: {(localTargetGpa as number).toFixed(1)}
+          </text>
         </g>
-      </g>
-      {/* Pulse ring on successful save */}
-      {saveStatus === 'saved' && (
-        <circle cx={x2 + 18} cy={y} r={14} fill="none" stroke="#f59e0b" strokeWidth={3}>
-          <animate attributeName="r" values="14;26;14" dur="0.55s" />
-          <animate attributeName="opacity" values="0.9;0;0" dur="0.55s" />
-        </circle>
+      )}
+
+      {(isHandleHovering || isDragging) && (
+        <circle cx={x0} cy={y0} r={16} fill="#fef3c7" opacity={0.55}
+          style={{ pointerEvents: 'none' }} />
+      )}
+
+      <circle
+        cx={x0} cy={y0} r={10}
+        fill="transparent"
+        stroke={isHandleHovering ? '#f59e0b' : 'transparent'}
+        strokeWidth={2}
+        style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+        onPointerDown={onHandlePointerDown}
+        onPointerEnter={onHandlePointerEnter}
+        onPointerLeave={onHandlePointerLeave}
+      />
+
+      {isHandleHovering && !isDragging && (
+        <g transform={`translate(${x0}, ${y0 - 28})`}>
+          <rect x={-56} y={-16} width={112} height={18} rx={5} fill="#1e293b" />
+          <text x={0} y={-3} fill="white" fontSize={11} fontWeight="500" textAnchor="middle">
+            Drag to set your goal
+          </text>
+        </g>
+      )}
+
+      {isDragging && pendingTargetGpa != null && dragSvgX != null && dragSvgY != null && (
+        <g transform={`translate(${dragSvgX + 12}, ${dragSvgY - 20})`}>
+          <rect x={-4} y={-16} width={80} height={20} rx={5} fill="#f59e0b" />
+          <text x={36} y={-2} fill="white" fontSize={12} fontWeight="bold" textAnchor="middle">
+            Goal: {pendingTargetGpa.toFixed(2)}
+          </text>
+        </g>
       )}
     </g>
   );
@@ -383,6 +420,18 @@ const parseGrade = (grade: string | null, gradePoints: number | null) => {
 
 export default function StudentView({ isStudentSelf = false }: { isStudentSelf?: boolean }) {
   const { id } = useParams();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
+  const chartColors = {
+    grid: isDark ? '#334155' : '#e2e8f0',
+    axis: isDark ? '#64748b' : '#94a3b8',
+    tooltipBg: isDark ? '#1e293b' : '#ffffff',
+    tooltipBorder: isDark ? '#334155' : '#e2e8f0',
+    tooltipText: isDark ? '#f1f5f9' : '#0f172a',
+    tooltipItem: isDark ? '#94a3b8' : '#64748b',
+  };
+
   const [student, setStudent] = useState<Student | null>(null);
   const [school, setSchool] = useState<School | null>(null);
   const [weeklyGpa, setWeeklyGpa] = useState<WeeklyGpaSnapshot[]>([]);
@@ -393,11 +442,16 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
   const [error, setError] = useState<string | null>(null);
   const [isTopGrower, setIsTopGrower] = useState(false);
   const [selfAssessments, setSelfAssessments] = useState<SelfAssessment[]>([]);
+  const [shoutouts, setShoutouts] = useState<StudentShoutout[]>([]);
+  const [showAllHighlights, setShowAllHighlights] = useState(false);
   const [showAssessmentModal, setShowAssessmentModal] = useState(false);
   const [localTargetGpa, setLocalTargetGpa] = useState(0);
   const [pendingTargetGpa, setPendingTargetGpa] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'pending' | 'saved'>('idle');
+  const [isHandleHovering, setIsHandleHovering] = useState(false);
+  const [dragSvgX, setDragSvgX] = useState<number | null>(null);
+  const [dragSvgY, setDragSvgY] = useState<number | null>(null);
   const chartWrapperRef = useRef<HTMLDivElement>(null);
   const yScaleRef = useRef<any>(null);
   const chartOffsetRef = useRef<any>(null);
@@ -418,11 +472,12 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
         const studentRecord = studentResponse.data as Student;
         setStudent(studentRecord);
 
-        const [schoolResponse, gpaResponse, attendanceResponse, classGradesResponse] = await Promise.all([
+        const [schoolResponse, gpaResponse, attendanceResponse, classGradesResponse, shoutoutsResponse] = await Promise.all([
           supabase.from('schools').select('*').eq('id', studentRecord.school_id).maybeSingle(),
           supabase.from('weekly_gpa_snapshots').select('*').eq('student_id', id),
           supabase.from('weekly_attendance').select('*').eq('student_id', id),
-          supabase.from('weekly_class_grades').select('*').eq('student_id', id)
+          supabase.from('weekly_class_grades').select('*').eq('student_id', id),
+          supabase.from('student_shoutouts').select('*').eq('student_id', id).order('created_at', { ascending: false })
         ]);
 
         if (schoolResponse.error) throw schoolResponse.error;
@@ -434,6 +489,7 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
         setWeeklyGpa((gpaResponse.data ?? []) as WeeklyGpaSnapshot[]);
         setAttendance((attendanceResponse.data ?? []) as WeeklyAttendance[]);
         setWeeklyGrades((classGradesResponse.data ?? []) as WeeklyClassGrade[]);
+        setShoutouts((shoutoutsResponse.data ?? []) as StudentShoutout[]);
 
         if (studentRecord.advisory_class_id) {
           const classResponse = await supabase
@@ -499,10 +555,8 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
     checkTopGrower();
   }, [student?.id, student?.advisory_class_id, activeYear]);
 
-  // Sync localTargetGpa when student record loads
   useEffect(() => {
     if (student?.target_gpa != null) setLocalTargetGpa(student.target_gpa);
-    else setLocalTargetGpa(3.0);
   }, [student?.target_gpa]);
 
   const saveTargetGpa = useCallback(async (value: number) => {
@@ -518,15 +572,24 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
   const handleTargetPointerDown = useCallback((e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     setIsDragging(true);
+    setIsHandleHovering(false);
     setSaveStatus('idle');
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
   }, []);
+
+  const handleHandlePointerEnter = useCallback(() => setIsHandleHovering(true), []);
+  const handleHandlePointerLeave = useCallback(() => setIsHandleHovering(false), []);
 
   const handleChartPointerMove = useCallback((e: React.PointerEvent) => {
     if (!isDragging || !yScaleRef.current?.invert || !chartOffsetRef.current) return;
     const rect = chartWrapperRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const relY = e.clientY - rect.top - chartOffsetRef.current.top;
+    const offset = chartOffsetRef.current;
+    const svgX = Math.max(offset.left, Math.min(offset.left + offset.width, e.clientX - rect.left));
+    const svgY = Math.max(offset.top, Math.min(offset.top + offset.height, e.clientY - rect.top));
+    setDragSvgX(svgX);
+    setDragSvgY(svgY);
+    const relY = svgY - offset.top;
     const raw = yScaleRef.current.invert(relY);
     const clamped = Math.max(0, Math.min(4, raw));
     setPendingTargetGpa(Math.round(clamped * 10) / 10);
@@ -535,7 +598,10 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
   const handleChartPointerUp = useCallback(() => {
     if (!isDragging) return;
     setIsDragging(false);
-    const snapped = pendingTargetGpa ?? localTargetGpa;
+    setDragSvgX(null);
+    setDragSvgY(null);
+    const snapped = pendingTargetGpa ?? (localTargetGpa > 0 ? localTargetGpa : null);
+    if (snapped == null) return;
     setLocalTargetGpa(snapped);
     setSaveStatus('pending');
     saveTimerRef.current = setTimeout(() => saveTargetGpa(snapped), 2000);
@@ -567,7 +633,6 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
 
   const currentWeekNumber = latestGpaPoint?.week_number ?? weeklyGpa.reduce((max, row) => Math.max(max, row.week_number), 1);
 
-  // Load self-assessments and show the modal if the student hasn't submitted this week
   useEffect(() => {
     if (!student?.id || !activeYear || currentWeekNumber === 0) return;
 
@@ -625,7 +690,7 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
       const rows = weeklyGrades
         .filter((grade) => grade.class_id === subjectRow.classId)
         .reduce((acc, grade) => {
-          const parsed = parseGrade(grade.grade, grade.grade_points ?? null);
+          const parsed = parseGrade(grade.grade ?? null, grade.grade_points ?? null);
           if (parsed !== null) acc.set(grade.week_number, parsed);
           return acc;
         }, new Map<number, number>());
@@ -664,27 +729,18 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
   }, [student, localTargetGpa, latestGpaPoint, weeklyGrades, classes, activeYear, semesterWeeks, currentWeekNumber]);
 
   const getGradeCellClasses = (grade: number | null, previousGrade: number | null, weekIndex: number) => {
-    const baseClasses = 'whitespace-nowrap px-4 py-4';
+    const base = 'whitespace-nowrap px-4 py-4';
     if (weekIndex === 0 || grade === null || previousGrade === null) {
-      return `${baseClasses} text-slate-700`;
+      return `${base} text-slate-700 dark:text-slate-300`;
     }
-
     const delta = grade - previousGrade;
     if (delta > 0) {
-      if (delta <= 4) {
-        return `${baseClasses} bg-green-50 text-green-700`;
-      }
-      if (delta <= 9) {
-        return `${baseClasses} bg-green-100 text-green-800`;
-      }
-      return `${baseClasses} bg-green-200 text-green-900 font-semibold`;
+      if (delta <= 4) return `${base} bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-400`;
+      if (delta <= 9) return `${base} bg-green-100 text-green-800 dark:bg-green-800/50 dark:text-green-300`;
+      return `${base} bg-green-200 text-green-900 font-semibold dark:bg-green-700/50 dark:text-green-200`;
     }
-
-    if (delta < 0) {
-      return `${baseClasses} bg-red-50 text-red-700`;
-    }
-
-    return `${baseClasses} text-slate-700`;
+    if (delta < 0) return `${base} bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-400`;
+    return `${base} text-slate-700 dark:text-slate-300`;
   };
 
   const gradeGraphData = useMemo(() => {
@@ -705,7 +761,7 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
     return classes.map((cls) => {
       const classGrades = weeklyGrades
         .filter((grade) => grade.class_id === cls.id)
-        .map((grade) => ({ week_number: grade.week_number, grade: parseGrade(grade.grade, grade.grade_points ?? null) }))
+        .map((grade) => ({ week_number: grade.week_number, grade: parseGrade(grade.grade ?? null, grade.grade_points ?? null) }))
         .sort((a, b) => a.week_number - b.week_number);
       const latestWeek = classGrades.reduce((max, row) => Math.max(max, row.week_number), 0);
       const data = Array.from({ length: semesterWeeks }, (_, index) => {
@@ -755,10 +811,10 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
         <div className="flex min-h-screen items-center justify-center px-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-            <p className="text-sm font-medium text-slate-700">Loading student view…</p>
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Loading student view…</p>
           </div>
         </div>
       </div>
@@ -767,12 +823,12 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
         <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-10 shadow-sm ring-1 ring-rose-200">
-            <p className="text-sm font-semibold text-rose-700">Unable to load student details</p>
-            <p className="mt-4 text-slate-700">{error}</p>
-            <Link to="/dashboard" className="mt-6 inline-flex rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800">
+          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-10 shadow-sm ring-1 ring-rose-200 dark:border-rose-800/50 dark:bg-rose-950/40 dark:ring-rose-800/50">
+            <p className="text-sm font-semibold text-rose-700 dark:text-rose-400">Unable to load student details</p>
+            <p className="mt-4 text-slate-700 dark:text-slate-300">{error}</p>
+            <Link to="/dashboard" className="mt-6 inline-flex rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300">
               Back to dashboard
             </Link>
           </div>
@@ -796,33 +852,41 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
     );
   }
 
+  const celebrationGradient = celebration
+    ? (isDark ? celebrationGradients[celebration.colorScheme].dark : celebrationGradients[celebration.colorScheme].light)
+    : '';
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-6 rounded-[2rem] bg-amber-50 p-8 shadow-sm ring-1 ring-amber-200 sm:flex-row sm:items-end sm:justify-between">
+        {/* ── Welcome header ── */}
+        <div className="flex flex-col gap-6 rounded-[2rem] bg-amber-50 p-8 shadow-sm ring-1 ring-amber-200 dark:bg-amber-950/30 dark:ring-amber-800/50 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-amber-700">Welcome</p>
-            <h1 className="mt-3 text-4xl font-semibold text-slate-900">Welcome, {student.first_name}!</h1>
-            <p className="mt-2 text-base text-slate-700">Week {currentWeekNumber} of {semesterWeeks}</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-amber-700 dark:text-amber-400">Welcome</p>
+            <h1 className="mt-3 text-4xl font-semibold text-slate-900 dark:text-slate-100">Welcome, {student.first_name}!</h1>
+            <p className="mt-2 text-base text-slate-700 dark:text-slate-300">Week {currentWeekNumber} of {semesterWeeks}</p>
           </div>
-          {isStudentSelf ? (
-            <button
-              type="button"
-              onClick={() => supabase.auth.signOut()}
-              className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-amber-100"
-            >
-              Sign out
-            </button>
-          ) : (
-            <Link to="/" className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-              Back to dashboard
-            </Link>
-          )}
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            {isStudentSelf ? (
+              <button
+                type="button"
+                onClick={() => supabase.auth.signOut()}
+                className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-amber-100 dark:border-amber-700/50 dark:bg-amber-900/30 dark:text-slate-200 dark:hover:bg-amber-800/40"
+              >
+                Sign out
+              </button>
+            ) : (
+              <Link to="/" className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300">
+                Back to dashboard
+              </Link>
+            )}
+          </div>
         </div>
 
+        {/* ── Celebration banner ── */}
         {celebration && (
-          <div className={`mt-6 rounded-[2rem] bg-gradient-to-r ${celebrationStyles[celebration.colorScheme]} px-7 py-8 text-white shadow-xl`}>
+          <div className={`mt-6 rounded-[2rem] bg-gradient-to-r ${celebrationGradient} px-7 py-8 text-white shadow-xl`}>
             <div className="flex items-start gap-5">
               <span className="text-4xl leading-none" role="img">{celebration.emoji}</span>
               <div>
@@ -833,49 +897,91 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           </div>
         )}
 
-        {student.strengths && student.strengths.length > 0 && (
-          <div className="mt-6 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-amber-100">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-700">Your strengths</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {student.strengths.map((strength) => (
-                <span
-                  key={strength}
-                  className="rounded-full bg-gradient-to-r from-amber-100 to-orange-100 px-4 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200"
-                >
-                  {strength}
-                </span>
-              ))}
-            </div>
+        {/* ── Highlights panel ── */}
+        <div className="mt-6 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-amber-100 dark:bg-slate-800 dark:ring-amber-800/30">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-700 dark:text-amber-400">Your highlights</p>
+            {shoutouts.length > 0 && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+                {shoutouts.length}
+              </span>
+            )}
           </div>
-        )}
+          {shoutouts.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+              Your advisor will add highlights here as the semester unfolds.
+            </p>
+          ) : (
+            <>
+              <div className="mt-4 space-y-3">
+                {(showAllHighlights ? shoutouts : shoutouts.slice(0, 3)).map((s) => {
+                  const cfg = SHOUTOUT_CONFIG[s.shoutout_type];
+                  const weeksAgo = s.week_number != null ? currentWeekNumber - s.week_number : null;
+                  const timeLabel = weeksAgo === null ? ''
+                    : weeksAgo <= 0 ? 'This week'
+                    : weeksAgo === 1 ? 'Last week'
+                    : `Week ${s.week_number}`;
+                  return (
+                    <div key={s.id} className={`rounded-2xl ${cfg.bg} p-4 ring-1 ${cfg.ring}`}>
+                      <div className="flex items-start gap-3">
+                        <span className="text-2xl leading-none">{cfg.emoji}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-slate-900 dark:text-slate-100">{s.shoutout_text}</p>
+                          {s.personal_note && (
+                            <p className="mt-1 text-sm italic text-slate-600 dark:text-slate-300">"{s.personal_note}"</p>
+                          )}
+                          {timeLabel && (
+                            <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">{timeLabel}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {shoutouts.length > 3 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllHighlights((prev) => !prev)}
+                  className="mt-4 text-sm font-semibold text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"
+                >
+                  {showAllHighlights ? 'Show fewer' : `See all ${shoutouts.length} highlights`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
 
+        {/* ── Top grower banner ── */}
         {isTopGrower && (
-          <div className="mt-6 rounded-[2rem] border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 px-6 py-6 shadow-sm ring-2 ring-amber-200">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-600">Top grower this week</p>
-            <p className="mt-2 text-lg font-semibold text-amber-900">
-  You had the highest GPA growth in the advisory this week. Keep it up!
+          <div className="mt-6 rounded-[2rem] border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 px-6 py-6 shadow-sm ring-2 ring-amber-200 dark:border-amber-600/70 dark:from-amber-900/40 dark:to-yellow-900/20 dark:ring-amber-700/40">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-400">Top grower this week</p>
+            <p className="mt-2 text-lg font-semibold text-amber-900 dark:text-amber-200">
+              You had the highest GPA growth in the advisory this week. Keep it up!
             </p>
           </div>
         )}
 
+        {/* ── Three callout cards ── */}
         <div className="mt-8 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-[2rem] bg-emerald-50 p-6 shadow-sm ring-1 ring-emerald-200">
-            <p className="text-sm uppercase tracking-[0.3em] text-emerald-700">Your best class so far</p>
-            <p className="mt-4 text-2xl font-semibold text-slate-900">{bestClass?.subject ?? 'No data yet'}</p>
-            <p className="mt-2 text-sm text-slate-600">Highest current-week grade across your classes.</p>
+          <div className="rounded-[2rem] bg-emerald-50 p-6 shadow-sm ring-1 ring-emerald-200 dark:bg-emerald-950/30 dark:ring-emerald-800/50">
+            <p className="text-sm uppercase tracking-[0.3em] text-emerald-700 dark:text-emerald-400">Your best class so far</p>
+            <p className="mt-4 text-2xl font-semibold text-slate-900 dark:text-slate-100">{bestClass?.subject ?? 'No data yet'}</p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Highest current-week grade across your classes.</p>
           </div>
-          <div className="rounded-[2rem] bg-amber-50 p-6 shadow-sm ring-1 ring-amber-200">
-            <p className="text-sm uppercase tracking-[0.3em] text-amber-800">Your biggest growth</p>
-            <p className="mt-4 text-2xl font-semibold text-slate-900">{biggestGrowth?.subject ?? 'No data yet'}</p>
-            <p className="mt-2 text-sm text-slate-600">Largest week-over-week grade increase this semester.</p>
+          <div className="rounded-[2rem] bg-amber-50 p-6 shadow-sm ring-1 ring-amber-200 dark:bg-amber-950/30 dark:ring-amber-800/50">
+            <p className="text-sm uppercase tracking-[0.3em] text-amber-800 dark:text-amber-300">Your biggest growth</p>
+            <p className="mt-4 text-2xl font-semibold text-slate-900 dark:text-slate-100">{biggestGrowth?.subject ?? 'No data yet'}</p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Largest week-over-week grade increase this semester.</p>
           </div>
-          <div className="rounded-[2rem] bg-rose-50 p-6 shadow-sm ring-1 ring-rose-200">
-            <p className="text-sm uppercase tracking-[0.3em] text-rose-700">Your biggest opportunity</p>
-            <p className="mt-4 text-2xl font-semibold text-slate-900">{biggestOpportunity?.subject ?? 'No data yet'}</p>
-            <p className="mt-2 text-sm text-slate-600">Lowest current-week grade to help focus on improvement.</p>
+          <div className="rounded-[2rem] bg-rose-50 p-6 shadow-sm ring-1 ring-rose-200 dark:bg-rose-950/30 dark:ring-rose-800/50">
+            <p className="text-sm uppercase tracking-[0.3em] text-rose-700 dark:text-rose-400">Your biggest opportunity</p>
+            <p className="mt-4 text-2xl font-semibold text-slate-900 dark:text-slate-100">{biggestOpportunity?.subject ?? 'No data yet'}</p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Lowest current-week grade to help focus on improvement.</p>
           </div>
         </div>
 
+        {/* ── Advisor insights ── */}
         <AdvisorInsights
           student={student}
           weeklyGpa={weeklyGpa}
@@ -886,13 +992,15 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           schoolState={school?.state ?? ''}
           selfAssessment={selfAssessments.filter((a) => a.school_year === activeYear).sort((a, b) => b.week_number - a.week_number)[0] ?? null}
           pathToTarget={pathToTarget}
+          shoutouts={shoutouts}
         />
 
-        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        {/* ── GPA chart ── */}
+        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Weekly GPA</p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-900">Your GPA trend</h3>
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Weekly GPA</p>
+              <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Your GPA trend</h3>
             </div>
             <div className="flex items-center gap-3">
               {saveStatus === 'pending' && (
@@ -901,16 +1009,20 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
                   onClick={() => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); saveTargetGpa(localTargetGpa); }}
                   className="rounded-full bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-600"
                 >
-                  Set goal: {localTargetGpa.toFixed(1)}
+                  Save goal: {localTargetGpa.toFixed(1)}
                 </button>
               )}
               {saveStatus === 'saved' && (
-                <span className="text-xs font-semibold text-emerald-600">Goal saved!</span>
+                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Goal saved!</span>
               )}
-              <p className="text-sm text-slate-500">
-                Target: <span className="font-semibold text-amber-600">{localTargetGpa.toFixed(2)}</span>
-                <span className="ml-1 text-xs text-slate-400">— drag the bullseye to adjust</span>
-              </p>
+              {saveStatus === 'idle' && (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {localTargetGpa > 0
+                    ? <>Goal: <span className="font-semibold text-amber-600 dark:text-amber-400">{localTargetGpa.toFixed(1)}</span></>
+                    : <span className="text-xs text-slate-400 dark:text-slate-500">Drag the endpoint to set your goal</span>
+                  }
+                </p>
+              )}
             </div>
           </div>
 
@@ -923,23 +1035,36 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           >
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={gpaWithEffortSeries} margin={{ top: 5, right: 48, bottom: 5, left: 5 }}>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                <XAxis dataKey="week_number" tickFormatter={(value) => `W${value}`} />
-                <YAxis yAxisId="gpa" domain={[0, 4]} />
+                <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
+                <XAxis dataKey="week_number" tickFormatter={(value) => `W${value}`} tick={{ fill: chartColors.axis, fontSize: 12 }} />
+                <YAxis yAxisId="gpa" domain={[0, 4]} tick={{ fill: chartColors.axis, fontSize: 12 }} />
                 {hasEffortData && (
-                  <YAxis yAxisId="effort" orientation="right" domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tickFormatter={(v) => `${v}`} />
+                  <YAxis yAxisId="effort" orientation="right" domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tickFormatter={(v) => `${v}`} tick={{ fill: chartColors.axis, fontSize: 12 }} />
                 )}
-                <Tooltip formatter={(value: any, name: string) => [
-                  typeof value === 'number' ? (name === 'Effort' ? `${value}/5` : value.toFixed(2)) : value,
-                  name
-                ]} />
+                <Tooltip
+                  formatter={(value: any, name: string) => [
+                    typeof value === 'number' ? (name === 'Effort' ? `${value}/5` : value.toFixed(2)) : value,
+                    name
+                  ]}
+                  contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder, color: chartColors.tooltipText, borderRadius: 12 }}
+                  labelStyle={{ color: chartColors.tooltipText }}
+                  itemStyle={{ color: chartColors.tooltipItem }}
+                />
                 {hasEffortData && <Legend />}
                 <Customized
-                  component={DraggableTargetLine}
-                  displayGpa={isDragging ? (pendingTargetGpa ?? localTargetGpa) : localTargetGpa}
+                  component={ProjectionLine}
+                  lastGpaPoint={latestGpaPoint}
+                  semesterWeeks={semesterWeeks}
+                  localTargetGpa={localTargetGpa}
                   isDragging={isDragging}
+                  pendingTargetGpa={pendingTargetGpa}
+                  dragSvgX={dragSvgX}
+                  dragSvgY={dragSvgY}
                   saveStatus={saveStatus}
-                  onPointerDown={handleTargetPointerDown}
+                  isHandleHovering={isHandleHovering}
+                  onHandlePointerDown={handleTargetPointerDown}
+                  onHandlePointerEnter={handleHandlePointerEnter}
+                  onHandlePointerLeave={handleHandlePointerLeave}
                   yScaleRef={yScaleRef}
                   chartOffsetRef={chartOffsetRef}
                 />
@@ -975,58 +1100,60 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           </div>
         </div>
 
+        {/* ── Path to target ── */}
         {pathToTarget && pathToTarget.recommendations.length > 0 && (
-          <div className="mt-6 rounded-[2rem] bg-gradient-to-br from-amber-50 to-orange-50 p-6 shadow-sm ring-1 ring-amber-200">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-700">Your path to {localTargetGpa.toFixed(1)}</p>
-            <p className="mt-1 text-sm text-slate-600">
-              Gap to close: <span className="font-semibold text-slate-800">{Math.abs(pathToTarget.gapToClose).toFixed(2)} GPA points</span>
+          <div className="mt-6 rounded-[2rem] bg-gradient-to-br from-amber-50 to-orange-50 p-6 shadow-sm ring-1 ring-amber-200 dark:from-amber-950/30 dark:to-orange-950/20 dark:ring-amber-800/50">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-700 dark:text-amber-400">Your path to {localTargetGpa.toFixed(1)}</p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              Gap to close: <span className="font-semibold text-slate-800 dark:text-slate-200">{Math.abs(pathToTarget.gapToClose).toFixed(2)} GPA points</span>
             </p>
             <div className="mt-4 space-y-3">
               {pathToTarget.recommendations.map((rec, i) => (
-                <div key={rec.className} className="flex items-start gap-4 rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-amber-100">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-800">
+                <div key={rec.className} className="flex items-start gap-4 rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-amber-100 dark:bg-slate-800 dark:ring-amber-800/30">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-semibold text-slate-900">{rec.className}</span>
-                      <span className="text-sm text-slate-500">
-                        {rec.currentGrade} → <span className="font-semibold text-amber-700">{rec.targetGrade}</span>
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">{rec.className}</span>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">
+                        {rec.currentGrade} → <span className="font-semibold text-amber-700 dark:text-amber-400">{rec.targetGrade}</span>
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">{rec.reason}</p>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{rec.reason}</p>
                   </div>
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-xs text-slate-500">
+            <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
               If you hit these targets, your GPA will land right where you want it by Week {semesterWeeks}.
             </p>
           </div>
         )}
 
-        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        {/* ── Grade table ── */}
+        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Class grades</p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-900">Weekly grade table</h3>
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Class grades</p>
+              <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Weekly grade table</h3>
             </div>
-            <p className="text-sm text-slate-500">Showing Week 1 through Week {Math.max(1, ...weeklyGrades.map((row) => row.week_number))}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Showing Week 1 through Week {Math.max(1, ...weeklyGrades.map((row) => row.week_number))}</p>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-slate-700">
               <thead>
                 <tr>
-                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">Subject</th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Subject</th>
                   {Array.from({ length: Math.max(1, ...weeklyGrades.map((row) => row.week_number)) }, (_, index) => (
-                    <th key={index} className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">W{index + 1}</th>
+                    <th key={index} className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">W{index + 1}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                 {gradeRows.map((row) => (
-                  <tr key={row.classId} className="bg-slate-50">
-                    <td className="whitespace-nowrap px-4 py-4 font-medium text-slate-900">{row.subject}</td>
+                  <tr key={row.classId} className="bg-slate-50 dark:bg-slate-700/40">
+                    <td className="whitespace-nowrap px-4 py-4 font-medium text-slate-900 dark:text-slate-100">{row.subject}</td>
                     {row.weekGrades.map((grade, index) => {
                       const previousGrade = index > 0 ? row.weekGrades[index - 1] : null;
                       return (
@@ -1042,20 +1169,26 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           </div>
         </div>
 
-        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        {/* ── Class grade trends chart ── */}
+        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Class grade trends</p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-900">Subject performance over time</h3>
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Class grade trends</p>
+              <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Subject performance over time</h3>
             </div>
           </div>
           <div className="mt-6 h-96">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={gradeGraphData}>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                <XAxis dataKey="week_number" tickFormatter={(value) => `W${value}`} />
-                <YAxis allowDecimals={false} />
-                <Tooltip formatter={(value: any) => (typeof value === 'number' ? value.toFixed(0) : value)} />
+                <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
+                <XAxis dataKey="week_number" tickFormatter={(value) => `W${value}`} tick={{ fill: chartColors.axis, fontSize: 12 }} />
+                <YAxis allowDecimals={false} tick={{ fill: chartColors.axis, fontSize: 12 }} />
+                <Tooltip
+                  formatter={(value: any) => (typeof value === 'number' ? value.toFixed(0) : value)}
+                  contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder, color: chartColors.tooltipText, borderRadius: 12 }}
+                  labelStyle={{ color: chartColors.tooltipText }}
+                  itemStyle={{ color: chartColors.tooltipItem }}
+                />
                 <Legend />
                 {gradeSeries.map((series, index) => (
                   <Line
@@ -1076,21 +1209,22 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           </div>
         </div>
 
-        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        {/* ── Attendance ── */}
+        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Attendance summary</p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-900">Absences to date</h3>
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Attendance summary</p>
+              <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Absences to date</h3>
             </div>
           </div>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-3xl bg-slate-50 p-6">
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Total absences</p>
-              <p className="mt-3 text-4xl font-semibold text-slate-900">{totalAbsences}</p>
+            <div className="rounded-3xl bg-slate-50 p-6 dark:bg-slate-700/50">
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Total absences</p>
+              <p className="mt-3 text-4xl font-semibold text-slate-900 dark:text-slate-100">{totalAbsences}</p>
             </div>
-            <div className="rounded-3xl bg-slate-50 p-6">
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Absences this week</p>
-              <p className="mt-3 text-4xl font-semibold text-slate-900">{currentWeekAbsences}</p>
+            <div className="rounded-3xl bg-slate-50 p-6 dark:bg-slate-700/50">
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Absences this week</p>
+              <p className="mt-3 text-4xl font-semibold text-slate-900 dark:text-slate-100">{currentWeekAbsences}</p>
             </div>
           </div>
         </div>

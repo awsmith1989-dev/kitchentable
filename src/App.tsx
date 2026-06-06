@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabaseClient';
+import { ThemeProvider } from './lib/ThemeContext';
 import TeacherDashboard from './components/TeacherDashboard';
 import LoginForm from './components/LoginForm';
 import StudentView from './components/StudentView';
@@ -62,6 +63,13 @@ export default function App() {
         return;
       }
 
+      // Token refreshes and user metadata updates don't change the role — skip re-detection
+      // to avoid spurious timeouts or errors that would kick the user out mid-session.
+      if (_event === 'TOKEN_REFRESHED' || _event === 'USER_UPDATED') {
+        setLoading(false);
+        return;
+      }
+
       try {
         const timeout = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Role detection timed out after 5 seconds')), ROLE_TIMEOUT_MS)
@@ -112,47 +120,53 @@ export default function App() {
     );
   }
 
-  if (!session) return <LoginForm />;
+  if (!session) return <ThemeProvider><LoginForm /></ThemeProvider>;
 
   if (role === 'unknown') {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="flex min-h-screen items-center justify-center px-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-            <p className="text-base font-semibold text-slate-900">Account not recognized.</p>
-            <p className="mt-2 text-sm text-slate-600">Please contact your advisor.</p>
-            <button
-              type="button"
-              onClick={() => supabase.auth.signOut()}
-              className="mt-6 rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Sign out
-            </button>
+      <ThemeProvider>
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+          <div className="flex min-h-screen items-center justify-center px-4">
+            <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-base font-semibold text-slate-900 dark:text-slate-100">Account not recognized.</p>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Please contact your advisor.</p>
+              <button
+                type="button"
+                onClick={() => supabase.auth.signOut()}
+                className="mt-6 rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </ThemeProvider>
     );
   }
 
   if (role === 'student' && studentId) {
     return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="/student/:id" element={<StudentView isStudentSelf />} />
-          <Route path="*" element={<Navigate to={`/student/${studentId}`} replace />} />
-        </Routes>
-      </BrowserRouter>
+      <ThemeProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/student/:id" element={<StudentView isStudentSelf />} />
+            <Route path="*" element={<Navigate to={`/student/${studentId}`} replace />} />
+          </Routes>
+        </BrowserRouter>
+      </ThemeProvider>
     );
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<TeacherDashboard user={session.user} />} />
-        <Route path="/student/:id" element={<StudentView />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<TeacherDashboard user={session.user} />} />
+          <Route path="/student/:id" element={<StudentView />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }

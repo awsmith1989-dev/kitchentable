@@ -55,14 +55,14 @@ export default function SelfAssessmentModal({ studentId, schoolYear, weekNumber,
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-[2rem] bg-white p-8 shadow-2xl">
+      <div className="w-full max-w-md rounded-[2rem] bg-white p-8 shadow-2xl dark:bg-slate-800">
 
         {step === 1 && (
           <>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
               Week {weekNumber} check-in
             </p>
-            <h2 className="mt-3 text-2xl font-semibold text-slate-900">
+            <h2 className="mt-3 text-2xl font-semibold text-slate-900 dark:text-slate-100">
               How do you think you did in your classes last week?
             </h2>
             <div className="mt-6 flex flex-col gap-3">
@@ -73,8 +73,8 @@ export default function SelfAssessmentModal({ studentId, schoolYear, weekNumber,
                   onClick={() => setAcademicChoice(value)}
                   className={`rounded-2xl border-2 px-5 py-4 text-left text-sm font-semibold transition ${
                     academicChoice === value
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                      ? 'border-slate-900 bg-slate-900 text-white dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:bg-slate-600'
                   }`}
                 >
                   {label}
@@ -85,7 +85,7 @@ export default function SelfAssessmentModal({ studentId, schoolYear, weekNumber,
               type="button"
               disabled={!academicChoice}
               onClick={() => setStep(2)}
-              className="mt-6 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-6 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
             >
               Next
             </button>
@@ -94,10 +94,10 @@ export default function SelfAssessmentModal({ studentId, schoolYear, weekNumber,
 
         {step === 2 && (
           <>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
               Week {weekNumber} check-in
             </p>
-            <h2 className="mt-3 text-2xl font-semibold text-slate-900">
+            <h2 className="mt-3 text-2xl font-semibold text-slate-900 dark:text-slate-100">
               How much effort did you put into school last week?
             </h2>
             <div className="mt-6 flex flex-col gap-3">
@@ -108,8 +108,8 @@ export default function SelfAssessmentModal({ studentId, schoolYear, weekNumber,
                   onClick={() => setEffortRating(value)}
                   className={`flex items-center gap-4 rounded-2xl border-2 px-5 py-4 text-left transition ${
                     effortRating === value
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                      ? 'border-slate-900 bg-slate-900 text-white dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:bg-slate-600'
                   }`}
                 >
                   <span className="text-lg font-bold tabular-nums">{value}</span>
@@ -117,12 +117,12 @@ export default function SelfAssessmentModal({ studentId, schoolYear, weekNumber,
                 </button>
               ))}
             </div>
-            {error && <p className="mt-3 text-sm text-rose-700">{error}</p>}
+            {error && <p className="mt-3 text-sm text-rose-700 dark:text-rose-400">{error}</p>}
             <button
               type="button"
               disabled={effortRating === null || submitting}
               onClick={handleSubmit}
-              className="mt-6 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-6 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
             >
               {submitting ? 'Saving…' : 'Submit'}
             </button>
@@ -131,17 +131,17 @@ export default function SelfAssessmentModal({ studentId, schoolYear, weekNumber,
 
         {step === 'done' && (
           <div className="text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">
-              <svg className="h-7 w-7 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
+              <svg className="h-7 w-7 text-emerald-700 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h2 className="mt-5 text-2xl font-semibold text-slate-900">Thanks for checking in</h2>
-            <p className="mt-2 text-sm text-slate-600">Your advisor will see this.</p>
+            <h2 className="mt-5 text-2xl font-semibold text-slate-900 dark:text-slate-100">Thanks for checking in</h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Your advisor will see this.</p>
             <button
               type="button"
               onClick={onComplete}
-              className="mt-6 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="mt-6 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
             >
               View my dashboard
             </button>

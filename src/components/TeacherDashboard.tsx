@@ -3,10 +3,13 @@ import { Link } from 'react-router-dom';
 import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
+import { useTheme } from '../lib/ThemeContext';
 import AnimatedDot from './AnimatedDot';
 import StudentEditor from './StudentEditor';
 import WeeklyDataEntry from './WeeklyDataEntry';
-import { AdvisoryClass, ClassRecord, School, SelfAssessment, Student, Teacher, WeeklyAttendance, WeeklyClassGrade, WeeklyGpaSnapshot } from '../lib/types';
+import ThemeToggle from './ThemeToggle';
+import { AdvisoryClass, ClassRecord, School, SelfAssessment, Student, StudentShoutout, Teacher, WeeklyAttendance, WeeklyClassGrade, WeeklyGpaSnapshot } from '../lib/types';
+import ShoutoutModal from './ShoutoutModal';
 
 interface TeacherDashboardProps {
   user: User;
@@ -59,12 +62,12 @@ const defaultGpaList: WeeklyGpaSnapshot[] = [];
 const defaultAttendanceList: WeeklyAttendance[] = [];
 
 const growthBackground = (change: number | null) => {
-  if (change === null) return 'bg-white';
-  if (change > 0.25) return 'bg-gradient-to-r from-emerald-100 to-emerald-200';
-  if (change > 0) return 'bg-gradient-to-r from-emerald-50 to-emerald-100';
-  if (change < -0.25) return 'bg-gradient-to-r from-rose-100 to-rose-200';
-  if (change < 0) return 'bg-gradient-to-r from-rose-50 to-rose-100';
-  return 'bg-slate-50';
+  if (change === null) return 'bg-white dark:bg-slate-800/60';
+  if (change > 0.25) return 'bg-gradient-to-r from-emerald-100 to-emerald-200 dark:from-emerald-800 dark:to-emerald-700';
+  if (change > 0) return 'bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-900 dark:to-emerald-800';
+  if (change < -0.25) return 'bg-gradient-to-r from-rose-100 to-rose-200 dark:from-rose-800 dark:to-rose-700';
+  if (change < 0) return 'bg-gradient-to-r from-rose-50 to-rose-100 dark:from-rose-900 dark:to-rose-800';
+  return 'bg-slate-50 dark:bg-slate-700/40';
 };
 
 const stateOptions = [
@@ -81,6 +84,18 @@ const sortSnapshots = (a: WeeklyGpaSnapshot, b: WeeklyGpaSnapshot) => {
 };
 
 export default function TeacherDashboard({ user }: TeacherDashboardProps) {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
+  const chartColors = {
+    grid: isDark ? '#334155' : '#e2e8f0',
+    axis: isDark ? '#64748b' : '#94a3b8',
+    tooltipBg: isDark ? '#1e293b' : '#ffffff',
+    tooltipBorder: isDark ? '#334155' : '#e2e8f0',
+    tooltipText: isDark ? '#f1f5f9' : '#0f172a',
+    tooltipItem: isDark ? '#94a3b8' : '#64748b',
+  };
+
   const [school, setSchool] = useState<School | null>(null);
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [schoolState, setSchoolState] = useState<string>('');
@@ -97,13 +112,16 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
   const [weeklyAttendance, setWeeklyAttendance] = useState<WeeklyAttendance[]>(defaultAttendanceList);
   const [weeklyGrades, setWeeklyGrades] = useState<WeeklyClassGrade[]>([]);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [studentEditorOpen, setStudentEditorOpen] = useState(false);
+  const [shoutoutTarget, setShoutoutTarget] = useState<Student | null>(null);
+  const [openCheckins, setOpenCheckins] = useState<Set<string>>(new Set());
+  const [shoutouts, setShoutouts] = useState<StudentShoutout[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [advisoryClasses, setAdvisoryClasses] = useState<AdvisoryClass[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selfAssessments, setSelfAssessments] = useState<SelfAssessment[]>([]);
 
-  // Load all advisory classes for this teacher once on mount
   useEffect(() => {
     const loadInitial = async () => {
       setLoading(true);
@@ -128,7 +146,6 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           setFullName(t.full_name);
         }
 
-        // Triggers the class-data effect below
         setSelectedClassId(allAdvisoryClasses[0].id);
       } catch (err: any) {
         setError(err.message || 'Unable to load dashboard data.');
@@ -138,7 +155,6 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
     loadInitial();
   }, [user.id]);
 
-  // Reload all class-specific data whenever the selected advisory class changes
   useEffect(() => {
     if (!selectedClassId) return;
 
@@ -177,11 +193,12 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
         const studentIds = (studentsResponse.data ?? []).map((s: any) => s.id);
 
         if (studentIds.length > 0) {
-          const [gpaResponse, attendanceResponse, gradesResponse, assessmentsResponse] = await Promise.all([
+          const [gpaResponse, attendanceResponse, gradesResponse, assessmentsResponse, shoutoutsResponse] = await Promise.all([
             supabase.from('weekly_gpa_snapshots').select('*').in('student_id', studentIds),
             supabase.from('weekly_attendance').select('*').in('student_id', studentIds),
             supabase.from('weekly_class_grades').select('*').in('student_id', studentIds),
-            supabase.from('student_self_assessments').select('*').in('student_id', studentIds)
+            supabase.from('student_self_assessments').select('*').in('student_id', studentIds),
+            supabase.from('student_shoutouts').select('*').in('student_id', studentIds).order('created_at', { ascending: false })
           ]);
 
           if (gpaResponse.error) throw gpaResponse.error;
@@ -192,11 +209,13 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           setWeeklyAttendance((attendanceResponse.data ?? []) as WeeklyAttendance[]);
           setWeeklyGrades((gradesResponse.data ?? []) as WeeklyClassGrade[]);
           setSelfAssessments((assessmentsResponse.data ?? []) as SelfAssessment[]);
+          setShoutouts((shoutoutsResponse.data ?? []) as StudentShoutout[]);
         } else {
           setWeeklyGpa(defaultGpaList);
           setWeeklyAttendance(defaultAttendanceList);
           setWeeklyGrades([]);
           setSelfAssessments([]);
+          setShoutouts([]);
         }
       } catch (err: any) {
         setError(err.message || 'Unable to load class data.');
@@ -261,13 +280,8 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           .eq('id', teacher.id)
           .maybeSingle();
 
-        if (teacherError) {
-          throw teacherError;
-        }
-
-        if (teacherData) {
-          setTeacher(teacherData as Teacher);
-        }
+        if (teacherError) throw teacherError;
+        if (teacherData) setTeacher(teacherData as Teacher);
       }
 
       if (schoolState !== (school.state ?? '')) {
@@ -277,20 +291,13 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           .eq('id', school.id)
           .maybeSingle();
 
-        if (schoolError) {
-          throw schoolError;
-        }
-
-        if (schoolData) {
-          setSchool(schoolData as School);
-        }
+        if (schoolError) throw schoolError;
+        if (schoolData) setSchool(schoolData as School);
       }
 
       if (newPassword) {
         const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
-        if (authError) {
-          throw authError;
-        }
+        if (authError) throw authError;
       }
 
       setAccountSettingsOpen(false);
@@ -312,16 +319,16 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
     setAccountSettingsOpen(false);
   };
 
-  const [panelMode, setPanelMode] = useState<'none' | 'entry' | 'students'>('none');
+  const [panelMode, setPanelMode] = useState<'none' | 'entry'>('none');
 
   const handleOpenStudentEditor = (student: Student | null = null) => {
     setEditingStudent(student);
-    setPanelMode('students');
+    setStudentEditorOpen(true);
   };
 
   const handleCloseStudentEditor = () => {
     setEditingStudent(null);
-    setPanelMode('none');
+    setStudentEditorOpen(false);
   };
 
   const handleStudentSaved = (student: Student) => {
@@ -332,7 +339,22 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
       }
       return [student, ...prev];
     });
-    setPanelMode('none');
+    setStudentEditorOpen(false);
+    setEditingStudent(null);
+  };
+
+  const handleShoutoutSaved = (shoutout: StudentShoutout) => {
+    setShoutouts((prev) => [shoutout, ...prev]);
+    setShoutoutTarget(null);
+  };
+
+  const toggleCheckin = (id: string) => {
+    setOpenCheckins((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const semesterWeeks = school?.semester_weeks ?? defaultSchool.semester_weeks;
@@ -400,7 +422,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
     const summaries = students.map((student) => {
       const snapshots = weeklyGpa
         .filter((record) => record.student_id === student.id && record.school_year === activeYear)
-        .sort(sortSnapshots); // descending: latest first
+        .sort(sortSnapshots);
 
       const latest = snapshots[0] ?? null;
       const previous = snapshots[1] ?? null;
@@ -414,7 +436,6 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           ? `${name}'s first GPA on record this year.`
           : `No GPA data yet for ${name}.`;
       } else {
-        // Streak detection — reverse to chronological order (oldest first)
         const chrono = [...snapshots].reverse();
         const n = chrono.length;
         const latestDir =
@@ -432,7 +453,6 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           }
         }
 
-        // All grade rows for this student this year
         const studentAllGrades = weeklyGrades.filter(
           (g) => g.student_id === student.id && g.school_year === activeYear
         );
@@ -446,7 +466,6 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           return Number.isFinite(parsed) ? parsed : null;
         };
 
-        // Week-over-week comparison across all classes
         const comparisons: { subject: string; delta: number }[] = [];
         currentGrades.forEach((row) => {
           const cls = classes.find((c) => c.id === row.class_id);
@@ -466,7 +485,6 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
         const worstSubject = [...declined].sort((a, b) => a.delta - b.delta)[0]?.subject ?? '';
         const bestSubject = [...improved].sort((a, b) => b.delta - a.delta)[0]?.subject ?? '';
 
-        // Per-class multi-week trend detection (requires 3+ data points = 2+ consecutive same-direction changes)
         const uniqueClassIds = [...new Set(studentAllGrades.map((g) => g.class_id))];
         const classTrends: { subject: string; direction: 'up' | 'down'; streak: number }[] = [];
 
@@ -499,21 +517,12 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
             else break;
           }
 
-          if (trendStreak >= 2) {
-            classTrends.push({ subject: subjectName, direction: dir, streak: trendStreak });
-          }
+          if (trendStreak >= 2) classTrends.push({ subject: subjectName, direction: dir, streak: trendStreak });
         });
 
         const topClassTrend = [...classTrends].sort((a, b) => b.streak - a.streak)[0] ?? null;
         const gpaDelta = Number(latest!.gpa) - Number(previous!.gpa);
 
-        // Priority order:
-        // 1. Every class moved the same direction this week (strongest immediate signal)
-        // 2. GPA-level streak ≥ 3
-        // 3. A specific class has been trending 2+ weeks
-        // 4. Majority of classes moved / single subject driver
-        // 5. GPA streak = 2
-        // 6. Generic fallbacks
         if (total > 0 && declined.length === total) {
           callout = `${name}'s grades dropped in every class this week.`;
         } else if (total > 0 && improved.length === total) {
@@ -571,7 +580,6 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
       };
     });
 
-    // Mark the single student with the highest positive change this week
     const maxChange = Math.max(...summaries.filter((s) => (s.change ?? 0) > 0).map((s) => s.change as number));
     if (Number.isFinite(maxChange) && maxChange > 0) {
       const topIdx = summaries.findIndex((s) => s.change === maxChange);
@@ -581,12 +589,14 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
     return summaries;
   }, [students, weeklyGpa, weeklyGrades, classes, activeYear]);
 
+  const inputCls = 'mt-1 block w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700/60 dark:text-slate-100 dark:focus:border-slate-500';
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
         <div className="flex min-h-screen items-center justify-center px-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-            <p className="text-sm font-medium text-slate-700">Loading dashboard data...</p>
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Loading dashboard data...</p>
           </div>
         </div>
       </div>
@@ -594,18 +604,20 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      {/* ── Header ── */}
+      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="text-xs uppercase tracking-[0.28em] text-slate-700">The Kitchen Table</div>
-          <div className="flex flex-1 items-center justify-center gap-3 text-sm font-medium text-slate-900">
+          <div className="text-xs uppercase tracking-[0.28em] text-slate-700 dark:text-slate-400">The Kitchen Table</div>
+          <div className="flex flex-1 items-center justify-center gap-3 text-sm font-medium text-slate-900 dark:text-slate-100">
             <span>{school?.name ?? defaultSchool.name}</span>
           </div>
           <div className="flex items-center gap-4">
+            <ThemeToggle />
             <button
               type="button"
               onClick={() => setAccountSettingsOpen((prev) => !prev)}
-              className="flex items-center gap-1 text-sm text-slate-500 underline-offset-2 transition hover:text-slate-700 hover:underline"
+              className="flex items-center gap-1 text-sm text-slate-500 underline-offset-2 transition hover:text-slate-700 hover:underline dark:text-slate-400 dark:hover:text-slate-200"
             >
               {user.email ?? 'Advisor'}
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -615,7 +627,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
             <button
               type="button"
               onClick={handleSignOut}
-              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
             >
               Sign out
             </button>
@@ -623,19 +635,17 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
         </div>
       </header>
 
+      {/* ── Account settings panel ── */}
       {accountSettingsOpen ? (
         <>
-          <div
-            className="fixed inset-0 z-30 bg-black/20"
-            onClick={() => setAccountSettingsOpen(false)}
-          />
-          <div className="fixed inset-y-0 right-0 z-40 flex w-96 flex-col bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h2 className="text-base font-semibold text-slate-900">Account settings</h2>
+          <div className="fixed inset-0 z-30 bg-black/20" onClick={() => setAccountSettingsOpen(false)} />
+          <div className="fixed inset-y-0 right-0 z-40 flex w-96 flex-col bg-white shadow-xl dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Account settings</h2>
               <button
                 type="button"
                 onClick={() => setAccountSettingsOpen(false)}
-                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -644,31 +654,16 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
             </div>
             <div className="flex-1 space-y-5 overflow-y-auto px-6 py-6">
               <div>
-                <label htmlFor="account-full-name" className="block text-sm font-medium text-slate-700">
-                  Full name
-                </label>
-                <input
-                  id="account-full-name"
-                  type="text"
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
-                  className="mt-1 block w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none"
-                />
+                <label htmlFor="account-full-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Full name</label>
+                <input id="account-full-name" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} />
               </div>
               <div>
-                <p className="block text-sm font-medium text-slate-700">Email</p>
-                <p className="mt-1 text-sm text-slate-500">{user.email}</p>
+                <p className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{user.email}</p>
               </div>
               <div>
-                <label htmlFor="account-school-state" className="block text-sm font-medium text-slate-700">
-                  School state
-                </label>
-                <select
-                  id="account-school-state"
-                  value={schoolState}
-                  onChange={(event) => setSchoolState(event.target.value)}
-                  className="mt-1 block w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none"
-                >
+                <label htmlFor="account-school-state" className="block text-sm font-medium text-slate-700 dark:text-slate-300">School state</label>
+                <select id="account-school-state" value={schoolState} onChange={(e) => setSchoolState(e.target.value)} className={inputCls}>
                   <option value="">Select state</option>
                   {stateOptions.map((code) => (
                     <option key={code} value={code}>{code}</option>
@@ -676,40 +671,23 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                 </select>
               </div>
               <div>
-                <label htmlFor="account-new-password" className="block text-sm font-medium text-slate-700">
-                  New password
-                </label>
-                <input
-                  id="account-new-password"
-                  type="password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  placeholder="Leave blank to keep current"
-                  className="mt-1 block w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none"
-                />
+                <label htmlFor="account-new-password" className="block text-sm font-medium text-slate-700 dark:text-slate-300">New password</label>
+                <input id="account-new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Leave blank to keep current" className={inputCls} />
               </div>
               <div>
-                <label htmlFor="account-confirm-password" className="block text-sm font-medium text-slate-700">
-                  Confirm password
-                </label>
-                <input
-                  id="account-confirm-password"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  className="mt-1 block w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none"
-                />
+                <label htmlFor="account-confirm-password" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Confirm password</label>
+                <input id="account-confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={inputCls} />
               </div>
               {accountError ? (
-                <p className="text-sm text-rose-700">{accountError}</p>
+                <p className="text-sm text-rose-700 dark:text-rose-400">{accountError}</p>
               ) : null}
             </div>
-            <div className="flex items-center gap-3 border-t border-slate-200 px-6 py-4">
+            <div className="flex items-center gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-700">
               <button
                 type="button"
                 onClick={handleSaveAccountSettings}
                 disabled={savingAccount}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
               >
                 {savingAccount ? 'Saving…' : 'Save changes'}
               </button>
@@ -717,7 +695,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                 type="button"
                 onClick={handleCancelAccountSettings}
                 disabled={savingAccount}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
               >
                 Cancel
               </button>
@@ -726,11 +704,12 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
         </>
       ) : null}
 
+      {/* ── Main content ── */}
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="pb-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">The Kitchen Table</p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Advisor dashboard</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-600">Monitor advisory classes, student progress, weekly attendance, and GPA snapshots.</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">The Kitchen Table</p>
+          <h1 className="mt-2 text-3xl font-semibold text-slate-900 dark:text-slate-100">Advisor dashboard</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">Monitor advisory classes, student progress, weekly attendance, and GPA snapshots.</p>
         </div>
 
         {advisoryClasses.length > 1 && (
@@ -746,8 +725,8 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                 }}
                 className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                   selectedClassId === cls.id
-                    ? 'bg-slate-900 text-white'
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
+                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
                 }`}
               >
                 {cls.name}
@@ -757,23 +736,23 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
         )}
 
         {error ? (
-          <div className="mb-6 rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>
+          <div className="mb-6 rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-400">{error}</div>
         ) : null}
 
         <section className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-3xl bg-slate-900 p-6 text-white shadow-sm">
+          <div className="rounded-3xl bg-slate-900 p-6 text-white shadow-sm dark:bg-slate-700">
             <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Advisory class</p>
             <h2 className="mt-4 text-2xl font-semibold">{advisoryClass?.name ?? defaultClass.name}</h2>
           </div>
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Students</p>
-            <p className="mt-4 text-3xl font-semibold text-slate-900">{students.length}</p>
-            <p className="mt-2 text-sm text-slate-600">Roster count for this advisory class.</p>
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Students</p>
+            <p className="mt-4 text-3xl font-semibold text-slate-900 dark:text-slate-100">{students.length}</p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Roster count for this advisory class.</p>
           </div>
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Classes</p>
-            <p className="mt-4 text-3xl font-semibold text-slate-900">{classes.length}</p>
-            <p className="mt-2 text-sm text-slate-600">Active homeroom classes this semester.</p>
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Classes</p>
+            <p className="mt-4 text-3xl font-semibold text-slate-900 dark:text-slate-100">{classes.length}</p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Active homeroom classes this semester.</p>
           </div>
         </section>
 
@@ -781,22 +760,20 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           <button
             type="button"
             onClick={() => setPanelMode('entry')}
-            className="rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+            className="rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
           >
             Enter This Week's Data
           </button>
           <button
             type="button"
             onClick={() => handleOpenStudentEditor(null)}
-            className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+            className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
           >
             Add Student
           </button>
-          {panelMode === 'entry' ? (
-            <span className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-600">You are in weekly entry mode.</span>
-          ) : panelMode === 'students' ? (
-            <span className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-600">Editing student roster.</span>
-          ) : null}
+          {panelMode === 'entry' && (
+            <span className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-600 dark:bg-slate-700/60 dark:text-slate-300">You are in weekly entry mode.</span>
+          )}
         </div>
 
         {panelMode === 'entry' && school && advisoryClass ? (
@@ -816,35 +793,28 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           </div>
         ) : null}
 
-        {panelMode === 'students' && school ? (
-          <div className="mt-6">
-            <StudentEditor
-              advisoryClass={advisoryClass}
-              schoolId={school.id}
-              studentToEdit={editingStudent}
-              onClose={handleCloseStudentEditor}
-              onSaved={handleStudentSaved}
-            />
-          </div>
-        ) : null}
-
+        {/* ── Charts ── */}
         <section className="mt-8 grid gap-4 xl:grid-cols-2">
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Class GPA</p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-900">Semester trend</h2>
+                <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Class GPA</p>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Semester trend</h2>
               </div>
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.26em] text-slate-600">{activeYear || 'No year'}</span>
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.26em] text-slate-600 dark:bg-slate-700 dark:text-slate-300">{activeYear || 'No year'}</span>
             </div>
-
             <div className="mt-6 h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={gpaChartData}>
-                  <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                  <XAxis dataKey="week_number" tickFormatter={(value) => `W${value}`} />
-                  <YAxis domain={[0, 4]} />
-                  <Tooltip formatter={(value: any) => (typeof value === 'number' ? value.toFixed(2) : value)} />
+                  <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
+                  <XAxis dataKey="week_number" tickFormatter={(v) => `W${v}`} tick={{ fill: chartColors.axis, fontSize: 12 }} />
+                  <YAxis domain={[0, 4]} tick={{ fill: chartColors.axis, fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(value: any) => (typeof value === 'number' ? value.toFixed(2) : value)}
+                    contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder, color: chartColors.tooltipText, borderRadius: 12 }}
+                    labelStyle={{ color: chartColors.tooltipText }}
+                    itemStyle={{ color: chartColors.tooltipItem }}
+                  />
                   <Line
                     type="monotone"
                     dataKey="avg_gpa"
@@ -861,22 +831,26 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
             </div>
           </div>
 
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Class absences</p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-900">Average weekly absences</h2>
+                <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Class absences</p>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Average weekly absences</h2>
               </div>
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.26em] text-slate-600">Semester width</span>
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.26em] text-slate-600 dark:bg-slate-700 dark:text-slate-300">Semester width</span>
             </div>
-
             <div className="mt-6 h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={attendanceChartData}>
-                  <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                  <XAxis dataKey="week_number" tickFormatter={(value) => `W${value}`} />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip formatter={(value: any) => (typeof value === 'number' ? value.toFixed(2) : value)} />
+                  <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
+                  <XAxis dataKey="week_number" tickFormatter={(v) => `W${v}`} tick={{ fill: chartColors.axis, fontSize: 12 }} />
+                  <YAxis allowDecimals={false} tick={{ fill: chartColors.axis, fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(value: any) => (typeof value === 'number' ? value.toFixed(2) : value)}
+                    contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder, color: chartColors.tooltipText, borderRadius: 12 }}
+                    labelStyle={{ color: chartColors.tooltipText }}
+                    itemStyle={{ color: chartColors.tooltipItem }}
+                  />
                   <Line
                     type="monotone"
                     dataKey="avg_absences"
@@ -894,50 +868,87 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           </div>
         </section>
 
-        <section className="mt-8 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        {/* ── Student growth list ── */}
+        <section className="mt-8 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900">Student growth</h2>
-              <p className="mt-2 text-sm text-slate-500">Latest GPA change and recent history for each student in this advisory.</p>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Student growth</h2>
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Latest GPA change and recent history for each student in this advisory.</p>
             </div>
           </div>
 
           <div className="space-y-4">
             {studentSummaries.length === 0 ? (
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-700/30 dark:text-slate-400">
                 No students found for this advisory class.
               </div>
             ) : (
               studentSummaries.map((student) => (
-                <div key={student.id} className={`rounded-3xl border-2 p-4 shadow-sm ${student.isTopGrower ? 'border-amber-400 bg-gradient-to-br from-amber-50 to-yellow-50 ring-2 ring-amber-200' : `border-slate-200 ${growthBackground(student.change)}`}`}>
+                <div
+                  key={student.id}
+                  className={`rounded-3xl border-2 p-4 shadow-sm ${
+                    student.isTopGrower
+                      ? 'border-amber-400 bg-gradient-to-br from-amber-50 to-yellow-50 ring-2 ring-amber-200 dark:border-amber-600/70 dark:from-amber-900/40 dark:to-yellow-900/20 dark:ring-amber-700/40'
+                      : `border-slate-200 dark:border-slate-600/70 ${growthBackground(student.change)}`
+                  }`}
+                >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <div className="flex items-center gap-3">
-                        <Link to={`/student/${student.id}`} className="text-lg font-semibold text-slate-900 hover:text-slate-700">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link to={`/student/${student.id}`} className="text-lg font-semibold text-slate-900 hover:text-slate-700 dark:text-slate-100 dark:hover:text-slate-300">
                           {student.preferred_name || student.first_name} {student.last_name}
                         </Link>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenStudentEditor(student)}
-                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          Edit
-                        </button>
                         {student.isTopGrower && (
-                          <span className="rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                          <span className="rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/50 dark:text-amber-300">
                             Top grower
                           </span>
                         )}
+                        <div className="ml-1 flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenStudentEditor(student)}
+                            title="Edit student"
+                            className="rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 dark:border-slate-600 dark:bg-slate-700/50 dark:hover:bg-slate-600 dark:hover:text-slate-200"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShoutoutTarget(student)}
+                            title="Give a shoutout"
+                            className="rounded-full border border-amber-200 bg-amber-50 p-1.5 text-amber-500 transition hover:bg-amber-100 hover:text-amber-700 dark:border-amber-700/50 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-800/40"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleCheckin(student.id)}
+                            title="View check-in"
+                            className={`rounded-full border p-1.5 transition ${
+                              openCheckins.has(student.id)
+                                ? 'border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-700/50 dark:bg-blue-900/30 dark:text-blue-400'
+                                : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-600 dark:border-slate-600 dark:bg-slate-700/50 dark:hover:bg-slate-600 dark:hover:text-slate-300'
+                            }`}
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
-                      <p className="mt-1 text-sm text-slate-500">
+                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                         {student.student_id_external ?? 'No external ID'}
                         {student.grade_level ? ` · Grade ${student.grade_level}` : ''}
                       </p>
                     </div>
                     <div className="space-y-1 text-right">
-                      <p className="text-sm text-slate-500">Latest GPA</p>
-                      <p className="text-2xl font-semibold text-slate-900">{student.latestGpa?.toFixed(2) ?? '—'}</p>
-                      <p className={`text-sm font-semibold ${student.change === null ? 'text-slate-500' : student.change > 0 ? 'text-emerald-700' : student.change < 0 ? 'text-rose-700' : 'text-slate-500'}`}>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Latest GPA</p>
+                      <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{student.latestGpa?.toFixed(2) ?? '—'}</p>
+                      <p className={`text-sm font-semibold ${student.change === null ? 'text-slate-500 dark:text-slate-400' : student.change > 0 ? 'text-emerald-700 dark:text-emerald-400' : student.change < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         {student.change === null
                           ? 'No prior data'
                           : student.change > 0
@@ -950,27 +961,28 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                   </div>
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <p className="text-sm italic text-slate-600">{student.callout}</p>
+                    <p className="text-sm italic text-slate-600 dark:text-slate-400">{student.callout}</p>
                   </div>
-                  {(() => {
+
+                  {openCheckins.has(student.id) && (() => {
                     const a = selfAssessments.find(
                       (s) => s.student_id === student.id && s.school_year === activeYear && s.week_number === latestGpaWeek
                     );
                     if (!a) return (
-                      <p className="mt-2 text-xs text-slate-400">No check-in yet</p>
+                      <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">No check-in submitted this week.</p>
                     );
                     const academic = a.academic_self_assessment;
                     const academicChip = academic === 'better'
-                      ? { label: '↑ Better', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' }
+                      ? { label: '↑ Better', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-700/50' }
                       : academic === 'same'
-                        ? { label: '→ Same', cls: 'bg-amber-100 text-amber-800 border-amber-200' }
-                        : { label: '↓ Tough week', cls: 'bg-rose-100 text-rose-800 border-rose-200' };
+                        ? { label: '→ Same', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:border-amber-700/50' }
+                        : { label: '↓ Tough week', cls: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/50 dark:text-rose-300 dark:border-rose-700/50' };
                     return (
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${academicChip.cls}`}>
                           {academicChip.label}
                         </span>
-                        <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                        <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">
                           Effort: {a.effort_rating}/5
                         </span>
                       </div>
@@ -982,6 +994,28 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           </div>
         </section>
       </div>
+
+      {studentEditorOpen && school && (
+        <StudentEditor
+          advisoryClass={advisoryClass}
+          schoolId={school.id}
+          teacherId={user.id}
+          studentToEdit={editingStudent}
+          onClose={handleCloseStudentEditor}
+          onSaved={handleStudentSaved}
+        />
+      )}
+
+      {shoutoutTarget && (
+        <ShoutoutModal
+          student={shoutoutTarget}
+          teacherId={user.id}
+          weekNumber={latestGpaWeek}
+          schoolYear={activeYear}
+          onClose={() => setShoutoutTarget(null)}
+          onSaved={handleShoutoutSaved}
+        />
+      )}
     </div>
   );
 }

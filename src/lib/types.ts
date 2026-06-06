@@ -42,12 +42,35 @@ export interface Student {
   birth_date?: string;
   school_id: string;
   advisory_class_id?: string;
+  auth_user_id?: string;
   target_gpa?: number;
   post_secondary_plans?: string[];
   interests?: string;
+  career_goals?: string;
+  community_assets?: string;
   strengths?: string[];
   status: string;
   created_at: string;
+  updated_at: string;
+}
+
+export interface StudentShoutout {
+  id: string;
+  student_id: string;
+  teacher_id: string;
+  shoutout_type: 'strength' | 'growth' | 'character';
+  shoutout_text: string;
+  personal_note?: string;
+  week_number?: number;
+  school_year?: string;
+  created_at: string;
+}
+
+export interface StudentTeacherNotes {
+  id: string;
+  student_id: string;
+  teacher_id: string;
+  notes?: string;
   updated_at: string;
 }
 

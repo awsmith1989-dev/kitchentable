@@ -2,6 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-card: #ffffff;
+  --border-color: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --brand-teal: #0f766e;
+  --brand-teal-light: #ccfbf1;
+  --green-highlight: #dcfce7;
+  --red-highlight: #fef2f2;
+}
+
+[data-theme='dark'] {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-card: #1e293b;
+  --border-color: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --brand-teal: #2dd4bf;
+  --brand-teal-light: #134e4a;
+  --green-highlight: #14532d;
+  --red-highlight: #450a0a;
+}
+
 html {
   scroll-behavior: smooth;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { SelfAssessment, Student, WeeklyGpaSnapshot, WeeklyClassGrade, WeeklyAttendance, ClassRecord } from '../lib/types';
+import { SelfAssessment, Student, StudentShoutout, WeeklyGpaSnapshot, WeeklyClassGrade, WeeklyAttendance, ClassRecord } from '../lib/types';
 import { PathToTargetResult } from './StudentView';
 
 interface AdvisorInsightsProps {
@@ -12,6 +12,7 @@ interface AdvisorInsightsProps {
   schoolState: string;
   selfAssessment: SelfAssessment | null;
   pathToTarget?: PathToTargetResult | null;
+  shoutouts?: StudentShoutout[];
 }
 
 export default function AdvisorInsights({
@@ -24,6 +25,7 @@ export default function AdvisorInsights({
   schoolState,
   selfAssessment,
   pathToTarget,
+  shoutouts,
 }: AdvisorInsightsProps) {
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -110,6 +112,28 @@ export default function AdvisorInsights({
         ? `Identified strengths: ${student.strengths.join(', ')}.`
         : '';
 
+      // Shoutout history — recent highlights + pattern detection
+      const shoutoutLines: string[] = [];
+      if (shoutouts && shoutouts.length > 0) {
+        shoutoutLines.push('Recent highlights from advisor:');
+        shoutouts.slice(0, 5).forEach((s) => {
+          const emoji = s.shoutout_type === 'strength' ? '🌟' : s.shoutout_type === 'growth' ? '📈' : '🤝';
+          const weekPart = s.week_number ? ` (Week ${s.week_number})` : '';
+          shoutoutLines.push(`- ${emoji} ${s.shoutout_type}: "${s.shoutout_text}"${weekPart}`);
+        });
+        const counts = shoutouts.reduce(
+          (acc, s) => { acc[s.shoutout_type] = (acc[s.shoutout_type] ?? 0) + 1; return acc; },
+          {} as Record<string, number>
+        );
+        if ((counts.character ?? 0) >= 3)
+          shoutoutLines.push('Pattern: 3+ character recognitions — this student has strong interpersonal qualities; name that specifically.');
+        if ((counts.growth ?? 0) >= 3)
+          shoutoutLines.push('Pattern: 3+ growth recognitions — this student shows a consistent improvement pattern.');
+        if ((counts.strength ?? 0) >= 3)
+          shoutoutLines.push('Pattern: 3+ strength recognitions — this student has clear, repeatedly-noted personal strengths.');
+      }
+      const shoutoutContext = shoutoutLines.join('\n');
+
       const latestGpaSnap = weeklyGpa
         .filter((r) => r.school_year === activeYear)
         .sort((a, b) => b.week_number - a.week_number)[0];
@@ -140,6 +164,7 @@ Student data:
 ${subjectLine}
 ${selfAssessmentLine}
 ${strengthsLine}
+${shoutoutContext}
 ${pathContext}
 - Interests: ${student.interests || 'not specified'}
 - Post-secondary plans: ${postSecondaryPlans}
@@ -150,6 +175,8 @@ Rules:
 - No title, no heading, no bullet points, no markdown — flowing prose only
 - Use "you" and "your" throughout
 - Name real career fields or institutions in ${schoolState || 'their state'} where relevant
+- If highlights are listed, reference at least one specific shoutout by name — quote the exact text naturally in the sentence
+- If a pattern is noted in the highlights, make that the emotional anchor of the insight
 - 3–4 sentences total`;
 
       const response = await fetch('/.netlify/functions/advisor-insight', {
@@ -192,17 +219,17 @@ Rules:
   }, [student.id, activeYear]);
 
   return (
-    <div className="mt-8 rounded-[2rem] border-2 border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50 p-6 shadow-sm">
+    <div className="mt-8 rounded-[2rem] border-2 border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50 p-6 shadow-sm dark:border-slate-600 dark:from-slate-800/60 dark:to-slate-800/40">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">AI-Generated Insight</p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-900">Advisor Insights</h3>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">AI-Generated Insight</p>
+          <h3 className="mt-2 text-xl font-semibold text-slate-900 dark:text-slate-100">Advisor Insights</h3>
         </div>
         <button
           type="button"
           disabled={loading}
           onClick={generateInsight}
-          className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
         >
           {loading ? 'Generating…' : 'Refresh insight'}
         </button>
@@ -211,18 +238,18 @@ Rules:
       <div className="mt-4">
         {loading ? (
           <div className="space-y-2">
-            <div className="h-4 w-full animate-pulse rounded bg-slate-200"></div>
-            <div className="h-4 w-5/6 animate-pulse rounded bg-slate-200"></div>
-            <div className="h-4 w-4/5 animate-pulse rounded bg-slate-200"></div>
+            <div className="h-4 w-full animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
+            <div className="h-4 w-5/6 animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
+            <div className="h-4 w-4/5 animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
           </div>
         ) : error ? (
-          <p className="text-sm text-rose-700">{error}</p>
+          <p className="text-sm text-rose-700 dark:text-rose-400">{error}</p>
         ) : insight ? (
-          <p className="text-base leading-relaxed text-slate-700">{insight}</p>
+          <p className="text-base leading-relaxed text-slate-700 dark:text-slate-300">{insight}</p>
         ) : null}
       </div>
 
-      <p className="mt-4 text-xs text-slate-500">
+      <p className="mt-4 text-xs text-slate-500 dark:text-slate-500">
         This insight is AI-generated based on your academic progress, attendance, and profile information. It's meant to inspire and encourage, not to replace conversations with your advisor.
       </p>
     </div>
