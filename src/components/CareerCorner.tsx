@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ClassRecord, School, Student, WeeklyClassGrade } from '../lib/types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
+import { ClassRecord, School, Student, StudentCareerFavorite, WeeklyClassGrade } from '../lib/types';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -415,7 +416,7 @@ export function matchCareers(
 
   return scored
     .sort((a, b) => b.score - a.score || (b.wage ?? 0) - (a.wage ?? 0))
-    .slice(0, 5);
+    .slice(0, 10);
 }
 
 function getGrowingCareers(): Career[] {
@@ -432,7 +433,56 @@ function getGrowingCareers(): Career[] {
       // wage DESC
       return (b.wage ?? 0) - (a.wage ?? 0);
     })
-    .slice(0, 5);
+    .slice(0, 10);
+}
+
+// ── ScrollableList ────────────────────────────────────────────────────────────
+
+function ScrollableList({ children, cardBg = 'var(--color-card)' }: {
+  children: React.ReactNode;
+  cardBg?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [scrolled, setScrolled] = useState(false);
+
+  return (
+    <div className="relative flex-1 overflow-hidden">
+      <div
+        ref={ref}
+        className="h-full overflow-y-auto divide-y"
+        style={{ borderColor: 'var(--color-border)' }}
+        onScroll={() => setScrolled(true)}
+      >
+        {children}
+      </div>
+      <div
+        className="pointer-events-none absolute bottom-0 left-0 right-0 flex items-end justify-center pb-2 transition-opacity duration-300"
+        style={{
+          height: 52,
+          opacity: scrolled ? 0 : 1,
+          background: `linear-gradient(to bottom, transparent, ${cardBg})`,
+        }}
+      >
+        <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+          scroll for more ↓
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Heart icon ────────────────────────────────────────────────────────────────
+
+function HeartIcon({ filled }: { filled: boolean }) {
+  return filled ? (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
+    </svg>
+  ) : (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+    </svg>
+  );
 }
 
 // ── Badge components ──────────────────────────────────────────────────────────
@@ -488,10 +538,13 @@ interface CareerCornerProps {
   school: School | null;
   activeYear: string;
   onOpenProfile?: () => void;
+  isStudentSelf?: boolean;
+  onFavoritesChange?: (favorites: StudentCareerFavorite[]) => void;
 }
 
 export default function CareerCorner({
   student, weeklyGrades, classes, school, activeYear, onOpenProfile,
+  isStudentSelf = false, onFavoritesChange,
 }: CareerCornerProps) {
   const filteredGrades = useMemo(
     () => weeklyGrades.filter(g => g.school_year === activeYear),
@@ -501,6 +554,68 @@ export default function CareerCorner({
   const growingCareers = useMemo(() => getGrowingCareers(), []);
   const careerMatches = useMemo(() => matchCareers(student, filteredGrades, classes), [student, filteredGrades, classes]);
 
+  // ── Favorites ──────────────────────────────────────────────────────────────
+  const [favorites, setFavorites] = useState<StudentCareerFavorite[]>([]);
+  const [swapMessage, setSwapMessage] = useState(false);
+
+  useEffect(() => {
+    if (!isStudentSelf) return;
+    supabase
+      .from('student_career_favorites')
+      .select('*')
+      .eq('student_id', student.id)
+      .order('favorited_at', { ascending: true })
+      .then(({ data }) => setFavorites((data ?? []) as StudentCareerFavorite[]));
+  }, [student.id, isStudentSelf]);
+
+  useEffect(() => {
+    onFavoritesChange?.(favorites);
+  }, [favorites]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleFavorite = async (career: ScoredCareer) => {
+    const isFav = favorites.some(f => f.career_title === career.title);
+    if (!isFav && favorites.length >= 3) {
+      setSwapMessage(true);
+      setTimeout(() => setSwapMessage(false), 3500);
+      return;
+    }
+    if (isFav) {
+      setFavorites(prev => prev.filter(f => f.career_title !== career.title));
+      await supabase.from('student_career_favorites')
+        .delete()
+        .eq('student_id', student.id)
+        .eq('career_title', career.title);
+    } else {
+      const optimistic: StudentCareerFavorite = {
+        id: crypto.randomUUID(),
+        student_id: student.id,
+        career_title: career.title,
+        education_level: career.edu,
+        arkansas_median_wage: career.wage ?? undefined,
+        favorited_at: new Date().toISOString(),
+      };
+      setFavorites(prev => [...prev, optimistic]);
+      await supabase.from('student_career_favorites').insert({
+        student_id: student.id,
+        career_title: career.title,
+        education_level: career.edu,
+        arkansas_median_wage: career.wage ?? null,
+      });
+    }
+  };
+
+  const favTitles = useMemo(() => new Set(favorites.map(f => f.career_title)), [favorites]);
+
+  // Sort: favorited careers first, then remaining matches
+  const sortedCareerMatches = useMemo(() => {
+    return [...careerMatches].sort((a, b) => {
+      const aF = favTitles.has(a.title) ? 0 : 1;
+      const bF = favTitles.has(b.title) ? 0 : 1;
+      return aF - bF;
+    });
+  }, [careerMatches, favTitles]);
+
+  // ── Colleges ────────────────────────────────────────────────────────────────
   const [colleges, setColleges] = useState<LiveCollege[]>([]);
   const [collegesLoading, setCollegesLoading] = useState(false);
   const [collegesError, setCollegesError] = useState<string | null>(null);
@@ -582,18 +697,18 @@ export default function CareerCorner({
       {/* Three-card grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
 
-        {/* ── Card 1: Top 5 Growing Careers ── */}
+        {/* ── Card 1: Top 10 Growing Careers ── */}
         <div
           className="flex flex-col overflow-hidden rounded-[2rem] shadow-sm"
-          style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)' }}
+          style={{ height: 420, border: '1px solid var(--color-border)', background: 'var(--color-card)' }}
         >
-          <div className="px-6 py-5" style={{ background: 'var(--color-green-highlight)' }}>
-            <p className="text-lg font-bold" style={{ color: '#1a5c44' }}>🌱 Top 5 Growing Careers in Arkansas</p>
+          <div className="shrink-0 px-6 py-5" style={{ background: 'var(--color-green-highlight)' }}>
+            <p className="text-lg font-bold" style={{ color: '#1a5c44' }}>🌱 Top 10 Growing Careers in Arkansas</p>
             <p className="mt-0.5 text-xs" style={{ color: '#2d7a5e' }}>Based on current Arkansas labor market data</p>
           </div>
-          <div className="flex flex-1 flex-col divide-y" style={{ borderColor: 'var(--color-border)' }}>
+          <ScrollableList cardBg="var(--color-card)">
             {growingCareers.map((career, i) => (
-              <div key={career.title} className="flex items-start gap-3 px-5 py-4">
+              <div key={career.title} className="flex items-start gap-3 px-5 py-3.5">
                 <span
                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold"
                   style={{ background: 'var(--color-green-highlight)', color: '#1a5c44' }}
@@ -604,91 +719,123 @@ export default function CareerCorner({
                   <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--color-text-primary)' }}>
                     {career.title}
                   </p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
                     <EduBadge edu={career.edu} />
                     <span className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
                       {formatWage(career.wage)}/yr
                     </span>
+                    <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                      {OUTLOOK_LABEL[career.outlook]}
+                    </span>
                   </div>
-                  <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                    {OUTLOOK_LABEL[career.outlook]}
-                  </p>
                 </div>
               </div>
             ))}
-          </div>
+          </ScrollableList>
         </div>
 
-        {/* ── Card 2: Top Career Matches ── */}
+        {/* ── Card 2: Top 10 Career Matches ── */}
         <div
           className="flex flex-col overflow-hidden rounded-[2rem] shadow-sm"
-          style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)' }}
+          style={{ height: 420, border: '1px solid var(--color-border)', background: 'var(--color-card)' }}
         >
-          <div className="px-6 py-5" style={{ background: '#FFFBEB' }}>
+          <div className="shrink-0 px-6 py-5" style={{ background: '#FFFBEB' }}>
             <p className="text-lg font-bold" style={{ color: 'var(--color-accent-dark)' }}>⭐ Your Top Career Matches</p>
             <p className="mt-0.5 text-xs" style={{ color: '#92660a' }}>Based on your strengths, interests, and goals</p>
-          </div>
-          <div className="flex flex-1 flex-col divide-y" style={{ borderColor: 'var(--color-border)' }}>
-            {careerMatches.length === 0 ? (
-              <p className="px-5 py-6 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                Add your interests and post-secondary plans to see personalized career matches.
+            {isStudentSelf && (
+              <p
+                className="mt-2 text-xs font-semibold"
+                style={{ color: favorites.length >= 3 ? 'var(--color-primary)' : '#92660a' }}
+              >
+                {favorites.length >= 3
+                  ? '⭐ Your top 3 are set!'
+                  : `⭐ ${favorites.length} of 3 favorites chosen`}
               </p>
-            ) : careerMatches.map((career, i) => (
-              <div key={career.title} className="flex items-start gap-3 px-5 py-4">
-                <span
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                  style={{ background: '#FFF3C4', color: 'var(--color-accent-dark)' }}
-                >
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--color-text-primary)' }}>
-                    {career.title}
-                  </p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                    <EduBadge edu={career.edu} />
-                    {career.wage !== null && (
-                      <span className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
-                        {formatWage(career.wage)}/yr
-                      </span>
+            )}
+            {swapMessage && (
+              <p className="mt-1.5 text-xs font-medium" style={{ color: '#b45309' }}>
+                You've picked your top 3 — tap a filled heart to swap it out
+              </p>
+            )}
+          </div>
+          {sortedCareerMatches.length === 0 ? (
+            <p className="px-5 py-6 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              Add your interests and post-secondary plans to see personalized career matches.
+            </p>
+          ) : (
+            <ScrollableList cardBg="var(--color-card)">
+              {sortedCareerMatches.map((career, i) => {
+                const isFav = favTitles.has(career.title);
+                return (
+                  <div key={career.title} className="flex items-start gap-3 px-5 py-3.5">
+                    <span
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                      style={{ background: '#FFF3C4', color: 'var(--color-accent-dark)' }}
+                    >
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--color-text-primary)' }}>
+                        {career.title}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <EduBadge edu={career.edu} />
+                        {career.wage !== null && (
+                          <span className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
+                            {formatWage(career.wage)}/yr
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-xs italic" style={{ color: 'var(--color-text-secondary)' }}>
+                        {career.matchReason}
+                      </p>
+                    </div>
+                    {isStudentSelf && (
+                      <button
+                        type="button"
+                        onClick={() => toggleFavorite(career)}
+                        className="shrink-0 rounded-full p-1 transition"
+                        style={{ color: isFav ? 'var(--color-primary)' : 'var(--color-text-muted)' }}
+                        aria-label={isFav ? `Remove ${career.title} from favorites` : `Favorite ${career.title}`}
+                      >
+                        <HeartIcon filled={isFav} />
+                      </button>
                     )}
                   </div>
-                  <p className="mt-1 text-xs italic" style={{ color: 'var(--color-text-secondary)' }}>
-                    {career.matchReason}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </ScrollableList>
+          )}
         </div>
 
         {/* ── Card 3: College Matches ── */}
         <div
           className="flex flex-col overflow-hidden rounded-[2rem] shadow-sm"
-          style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)' }}
+          style={{ height: 420, border: '1px solid var(--color-border)', background: 'var(--color-card)' }}
         >
-          <div className="px-6 py-5" style={{ background: 'var(--color-card-tint)' }}>
+          <div className="shrink-0 px-6 py-5" style={{ background: 'var(--color-card-tint)' }}>
             <p className="text-lg font-bold" style={{ color: 'var(--color-primary)' }}>🎓 College Matches</p>
             <p className="mt-0.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>Arkansas institutions that fit your path</p>
           </div>
-          <div className="flex flex-1 flex-col divide-y" style={{ borderColor: 'var(--color-border)' }}>
-            {collegesLoading ? (
-              <div className="space-y-3 px-5 py-4">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="h-3.5 w-3/4 animate-pulse rounded" style={{ background: 'var(--color-border)' }} />
-                    <div className="h-3 w-1/2 animate-pulse rounded" style={{ background: 'var(--color-border)' }} />
-                    <div className="h-3 w-2/3 animate-pulse rounded" style={{ background: 'var(--color-border)' }} />
-                  </div>
-                ))}
-              </div>
-            ) : collegesError ? (
-              <p className="px-5 py-6 text-sm text-rose-600">{collegesError}</p>
-            ) : colleges.length === 0 ? (
-              <p className="px-5 py-6 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                Add your post-secondary plans to see college matches.
-              </p>
-            ) : colleges.map((college) => (
+          {collegesLoading ? (
+            <div className="space-y-3 px-5 py-4">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-2">
+                  <div className="h-3.5 w-3/4 animate-pulse rounded" style={{ background: 'var(--color-border)' }} />
+                  <div className="h-3 w-1/2 animate-pulse rounded" style={{ background: 'var(--color-border)' }} />
+                  <div className="h-3 w-2/3 animate-pulse rounded" style={{ background: 'var(--color-border)' }} />
+                </div>
+              ))}
+            </div>
+          ) : collegesError ? (
+            <p className="px-5 py-6 text-sm text-rose-600">{collegesError}</p>
+          ) : colleges.length === 0 ? (
+            <p className="px-5 py-6 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              Add your post-secondary plans to see college matches.
+            </p>
+          ) : (
+          <ScrollableList cardBg="var(--color-card)">
+            {colleges.map((college) => (
               <div key={college.name} className="px-5 py-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
@@ -755,8 +902,9 @@ export default function CareerCorner({
                 </p>
               </div>
             ))}
-          </div>
-          <div className="px-5 py-3" style={{ borderTop: '1px solid var(--color-border)' }}>
+          </ScrollableList>
+          )}
+          <div className="shrink-0 px-5 py-3" style={{ borderTop: '1px solid var(--color-border)' }}>
             <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
               Data from U.S. College Scorecard · Updated annually
             </p>

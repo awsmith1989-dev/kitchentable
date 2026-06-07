@@ -121,7 +121,7 @@ export const handler = async (event) => {
   }
 
   try {
-    const { prompt, postSecondaryPlans, interests, strongSubjects, strengths, riasecCodes, specificCareerInterest, collegeProximity } = JSON.parse(event.body || '{}');
+    const { prompt, postSecondaryPlans, interests, strongSubjects, strengths, riasecCodes, specificCareerInterest, collegeProximity, favorites } = JSON.parse(event.body || '{}');
 
     if (!prompt) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing prompt' }) };
@@ -168,6 +168,10 @@ export const handler = async (event) => {
         }`
       : '';
 
+    const favoritesContext = favorites?.length > 0
+      ? `Student's top career choices (self-selected favorites): ${favorites.map(f => f.career_title).join(', ')}`
+      : 'Student has not yet selected career favorites';
+
     const careerContext = relevantCareers.length > 0
       ? `Arkansas career matches based on this student's interests and goals:\n${relevantCareers.map(c =>
           `- ${c.title} | Education: ${c.level} | Arkansas workers: ${c.workers?.toLocaleString() ?? 'N/A'} | Job outlook: ${c.outlook} (${arkansasCareers.outlookLabels[c.outlook]}) | Median annual wage: $${c.wage?.toLocaleString() ?? 'N/A'}`
@@ -188,9 +192,11 @@ Your response must:
 - Use warm, asset-based language — never shame or deficit framing
 - End with one specific, concrete action they can take this week
 
+${favoritesContext}
 ${careerContext}
 ${onboardingContext}
 Never make up career data. Only reference careers from the Arkansas data provided above.
+If the student has career favorites listed above, reference at least one of them by name and connect it to their current academic performance or the Arkansas labor market data.
 Never mention specific GPA numbers — speak in terms of trends and momentum instead.
 Keep the response to 4-5 sentences. Be specific, not generic.`;
 

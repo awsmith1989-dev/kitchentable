@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabaseClient';
 import AnimatedDot from './AnimatedDot';
 import StudentEditor from './StudentEditor';
 import WeeklyDataEntry from './WeeklyDataEntry';
-import { AdvisoryClass, ClassRecord, School, SelfAssessment, Student, StudentShoutout, Teacher, WeeklyAttendance, WeeklyClassGrade, WeeklyGpaSnapshot } from '../lib/types';
+import { AdvisoryClass, ClassRecord, School, SelfAssessment, Student, StudentCareerFavorite, StudentShoutout, Teacher, WeeklyAttendance, WeeklyClassGrade, WeeklyGpaSnapshot } from '../lib/types';
 import ShoutoutModal from './ShoutoutModal';
 
 interface TeacherDashboardProps {
@@ -20,6 +20,7 @@ interface StudentGrowth extends Student {
   callout: string;
   isTopGrower: boolean;
   history: Array<{ week_number: number; gpa: number }>;
+  favorites: StudentCareerFavorite[];
 }
 
 interface GpaChartPoint {
@@ -126,6 +127,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
   const [advisoryClasses, setAdvisoryClasses] = useState<AdvisoryClass[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selfAssessments, setSelfAssessments] = useState<SelfAssessment[]>([]);
+  const [studentFavorites, setStudentFavorites] = useState<Map<string, StudentCareerFavorite[]>>(new Map());
 
   useEffect(() => {
     const loadInitial = async () => {
@@ -198,12 +200,13 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
         const studentIds = (studentsResponse.data ?? []).map((s: any) => s.id);
 
         if (studentIds.length > 0) {
-          const [gpaResponse, attendanceResponse, gradesResponse, assessmentsResponse, shoutoutsResponse] = await Promise.all([
+          const [gpaResponse, attendanceResponse, gradesResponse, assessmentsResponse, shoutoutsResponse, favoritesResponse] = await Promise.all([
             supabase.from('weekly_gpa_snapshots').select('*').in('student_id', studentIds),
             supabase.from('weekly_attendance').select('*').in('student_id', studentIds),
             supabase.from('weekly_class_grades').select('*').in('student_id', studentIds),
             supabase.from('student_self_assessments').select('*').in('student_id', studentIds),
-            supabase.from('student_shoutouts').select('*').in('student_id', studentIds).order('created_at', { ascending: false })
+            supabase.from('student_shoutouts').select('*').in('student_id', studentIds).order('created_at', { ascending: false }),
+            supabase.from('student_career_favorites').select('*').in('student_id', studentIds).order('favorited_at', { ascending: true }),
           ]);
 
           if (gpaResponse.error) throw gpaResponse.error;
@@ -215,6 +218,14 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           setWeeklyGrades((gradesResponse.data ?? []) as WeeklyClassGrade[]);
           setSelfAssessments((assessmentsResponse.data ?? []) as SelfAssessment[]);
           setShoutouts((shoutoutsResponse.data ?? []) as StudentShoutout[]);
+
+          const favMap = new Map<string, StudentCareerFavorite[]>();
+          for (const fav of (favoritesResponse.data ?? []) as StudentCareerFavorite[]) {
+            const arr = favMap.get(fav.student_id) ?? [];
+            arr.push(fav);
+            favMap.set(fav.student_id, arr);
+          }
+          setStudentFavorites(favMap);
         } else {
           setWeeklyGpa(defaultGpaList);
           setWeeklyAttendance(defaultAttendanceList);
@@ -578,6 +589,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
         change,
         callout,
         isTopGrower: false,
+        favorites: studentFavorites.get(student.id) ?? [],
         history: snapshots
           .slice(0, 6)
           .sort((a, b) => a.week_number - b.week_number)
@@ -592,7 +604,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
     }
 
     return summaries;
-  }, [students, weeklyGpa, weeklyGrades, classes, activeYear]);
+  }, [students, weeklyGpa, weeklyGrades, classes, activeYear, studentFavorites]);
 
   if (loading) {
     return (
@@ -1051,6 +1063,24 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                     <p className="text-sm italic" style={{ color: 'var(--color-text-secondary)' }}>{student.callout}</p>
                   </div>
 
+                  {/* Career favorites */}
+                  <div className="mt-2">
+                    {student.favorites.length === 0 ? (
+                      <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No career favorites yet</p>
+                    ) : (
+                      <div>
+                        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--color-text-muted)' }}>⭐ Career interests:</p>
+                        <ol className="space-y-0.5">
+                          {student.favorites.map((fav, fi) => (
+                            <li key={fav.id} className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                              {fi + 1}. {fav.career_title}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+
                   {openCheckins.has(student.id) && (() => {
                     const a = selfAssessments.find(
                       (s) => s.student_id === student.id && s.school_year === activeYear && s.week_number === latestGpaWeek
@@ -1097,6 +1127,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           studentToEdit={editingStudent}
           onClose={handleCloseStudentEditor}
           onSaved={handleStudentSaved}
+          school={school}
         />
       )}
 

@@ -112,6 +112,16 @@ export interface WeeklyClassGrade {
   updated_at: string;
 }
 
+export interface StudentCareerFavorite {
+  id: string;
+  student_id: string;
+  career_title: string;
+  onet_code?: string;
+  education_level?: string;
+  arkansas_median_wage?: number;
+  favorited_at: string;
+}
+
 export interface SelfAssessment {
   id: string;
   student_id: string;

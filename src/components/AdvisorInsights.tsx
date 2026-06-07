@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { SelfAssessment, Student, StudentShoutout, WeeklyGpaSnapshot, WeeklyClassGrade, WeeklyAttendance, ClassRecord } from '../lib/types';
+import { SelfAssessment, Student, StudentCareerFavorite, StudentShoutout, WeeklyGpaSnapshot, WeeklyClassGrade, WeeklyAttendance, ClassRecord } from '../lib/types';
 import { PathToTargetResult } from './StudentView';
 
 interface AdvisorInsightsProps {
@@ -14,6 +14,7 @@ interface AdvisorInsightsProps {
   pathToTarget?: PathToTargetResult | null;
   shoutouts?: StudentShoutout[];
   refreshKey?: number;
+  favorites?: StudentCareerFavorite[];
 }
 
 export default function AdvisorInsights({
@@ -28,6 +29,7 @@ export default function AdvisorInsights({
   pathToTarget,
   shoutouts,
   refreshKey,
+  favorites,
 }: AdvisorInsightsProps) {
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -196,6 +198,7 @@ Rules:
           riasecCodes: student.riasec_codes,
           specificCareerInterest: student.specific_career_interest,
           collegeProximity: student.college_proximity_preference,
+          favorites: favorites,
         }),
       });
 

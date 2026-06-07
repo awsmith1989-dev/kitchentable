@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { AdvisoryClass, Student, StudentTeacherNotes } from '../lib/types';
+import { AdvisoryClass, School, Student, StudentCareerFavorite, StudentTeacherNotes } from '../lib/types';
 import {
   PostSecondaryGrid,
   RiasecCardGrid,
@@ -17,6 +17,7 @@ interface StudentEditorProps {
   studentToEdit: Student | null;
   onClose: () => void;
   onSaved: (student: Student) => void;
+  school?: School | null;
 }
 
 type Tab = 'profile' | 'advisory' | 'notes' | 'student-profile';
@@ -66,7 +67,7 @@ function StyledTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>
 }
 
 export default function StudentEditor({
-  advisoryClass, schoolId, teacherId, studentToEdit, onClose, onSaved,
+  advisoryClass, schoolId, teacherId, studentToEdit, onClose, onSaved, school,
 }: StudentEditorProps) {
   const [activeTab, setActiveTab] = useState<Tab>('profile');
 
@@ -90,6 +91,7 @@ export default function StudentEditor({
   const [spCareerInterest, setSpCareerInterest] = useState('');
   const [spProximity, setSpProximity] = useState('');
   const [spCareerProfanityErr, setSpCareerProfanityErr] = useState<string | null>(null);
+  const [spFavorites, setSpFavorites] = useState<StudentCareerFavorite[]>([]);
 
   const [notes, setNotes] = useState('');
   const [notesId, setNotesId] = useState<string | null>(null);
@@ -118,6 +120,13 @@ export default function StudentEditor({
       setSpProximity(studentToEdit.college_proximity_preference ?? '');
 
       supabase
+        .from('student_career_favorites')
+        .select('*')
+        .eq('student_id', studentToEdit.id)
+        .order('favorited_at', { ascending: true })
+        .then(({ data }) => setSpFavorites((data ?? []) as StudentCareerFavorite[]));
+
+      supabase
         .from('student_teacher_notes')
         .select('*')
         .eq('student_id', studentToEdit.id)
@@ -134,6 +143,7 @@ export default function StudentEditor({
       setPostSecondaryPlans([]); setInterests(''); setCareerGoals('');
       setCommunityAssets(''); setStrengths([]);
       setSpPlans([]); setSpRiasecCodes([]); setSpStrengths([]); setSpCareerInterest(''); setSpProximity('');
+      setSpFavorites([]);
       setNotes(''); setNotesId(null);
     }
     setError(null);
@@ -408,6 +418,37 @@ export default function StudentEditor({
               <section>
                 <p className="mb-3 text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>College proximity preference</p>
                 <ProximityCardSelector value={spProximity} onChange={setSpProximity} compact />
+              </section>
+
+              <section>
+                <p className="mb-2 text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Student's favorited careers</p>
+                {spFavorites.length === 0 ? (
+                  <p className="text-sm italic" style={{ color: 'var(--color-text-muted)' }}>
+                    Student hasn't chosen favorites yet — encourage them to explore the Career Matches list.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {spFavorites.map((fav) => {
+                      const semesterStart = school?.semester_start_date ? new Date(school.semester_start_date) : null;
+                      let weekLabel = '';
+                      if (semesterStart) {
+                        const favDate = new Date(fav.favorited_at);
+                        const diffDays = Math.floor((favDate.getTime() - semesterStart.getTime()) / (1000 * 60 * 60 * 24));
+                        const weekNum = Math.max(1, Math.ceil((diffDays + 1) / 7));
+                        weekLabel = `favorited Week ${weekNum}`;
+                      } else {
+                        weekLabel = `favorited ${new Date(fav.favorited_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      }
+                      return (
+                        <div key={fav.id} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'var(--color-card-tint)', border: '1px solid var(--color-border)' }}>
+                          <span style={{ color: 'var(--color-primary)' }}>⭐</span>
+                          <span className="flex-1 text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{fav.career_title}</span>
+                          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{weekLabel}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             </div>
           )}

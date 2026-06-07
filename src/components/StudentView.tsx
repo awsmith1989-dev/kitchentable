@@ -426,6 +426,7 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [advisorRefreshKey, setAdvisorRefreshKey] = useState(0);
+  const [careerFavorites, setCareerFavorites] = useState<import('../lib/types').StudentCareerFavorite[]>([]);
   const [localTargetGpa, setLocalTargetGpa] = useState(0);
   const [pendingTargetGpa, setPendingTargetGpa] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -1044,6 +1045,7 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           pathToTarget={pathToTarget}
           shoutouts={shoutouts}
           refreshKey={advisorRefreshKey}
+          favorites={careerFavorites}
         />
 
         {/* ── GPA chart ── */}
@@ -1314,6 +1316,8 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           school={school}
           activeYear={activeYear}
           onOpenProfile={isStudentSelf ? () => setShowSettings(true) : undefined}
+          isStudentSelf={isStudentSelf}
+          onFavoritesChange={setCareerFavorites}
         />
 
       </div>
