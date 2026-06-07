@@ -13,6 +13,7 @@ interface AdvisorInsightsProps {
   selfAssessment: SelfAssessment | null;
   pathToTarget?: PathToTargetResult | null;
   shoutouts?: StudentShoutout[];
+  refreshKey?: number;
 }
 
 export default function AdvisorInsights({
@@ -26,6 +27,7 @@ export default function AdvisorInsights({
   selfAssessment,
   pathToTarget,
   shoutouts,
+  refreshKey,
 }: AdvisorInsightsProps) {
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -190,6 +192,10 @@ Rules:
           postSecondaryPlans: student.post_secondary_plans,
           interests: student.interests,
           strongSubjects: [bestSubject, secondBestSubject].filter(Boolean),
+          strengths: student.strengths,
+          riasecCodes: student.riasec_codes,
+          specificCareerInterest: student.specific_career_interest,
+          collegeProximity: student.college_proximity_preference,
         }),
       });
 
@@ -223,7 +229,8 @@ Rules:
 
   useEffect(() => {
     generateInsight();
-  }, [student.id, activeYear]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [student.id, activeYear, refreshKey]);
 
   return (
     <div

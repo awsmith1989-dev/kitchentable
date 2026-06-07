@@ -49,6 +49,10 @@ export interface Student {
   career_goals?: string;
   community_assets?: string;
   strengths?: string[];
+  riasec_codes?: string[];
+  onboarding_completed?: boolean;
+  college_proximity_preference?: string;
+  specific_career_interest?: string;
   status: string;
   created_at: string;
   updated_at: string;

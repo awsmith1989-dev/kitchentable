@@ -68,12 +68,12 @@ export default function LoginForm() {
         >
           <div className="flex justify-between gap-4">
             {[
-              { icon: '📈', label: 'Semester-long trajectory' },
-              { icon: '🌟', label: 'Asset-based advising' },
-              { icon: '🤖', label: 'AI-powered insights' },
+              { icon: '/Icons/semester-long-trajectory.png', label: 'Semester-long trajectory' },
+              { icon: '/Icons/Asset-based-advising.png',     label: 'Asset-based advising' },
+              { icon: '/Icons/AI-powered-insights .png',     label: 'AI-powered insights' },
             ].map(({ icon, label }) => (
               <div key={label} className="flex flex-1 flex-col items-center gap-1.5 text-center">
-                <span className="text-xl">{icon}</span>
+                <img src={icon} alt="" aria-hidden="true" style={{ width: 32, height: 32, objectFit: 'contain' }} />
                 <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.65)' }}>
                   {label}
                 </span>

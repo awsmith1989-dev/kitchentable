@@ -121,7 +121,7 @@ export const handler = async (event) => {
   }
 
   try {
-    const { prompt, postSecondaryPlans, interests, strongSubjects } = JSON.parse(event.body || '{}');
+    const { prompt, postSecondaryPlans, interests, strongSubjects, strengths, riasecCodes, specificCareerInterest, collegeProximity } = JSON.parse(event.body || '{}');
 
     if (!prompt) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing prompt' }) };
@@ -137,6 +137,36 @@ export const handler = async (event) => {
     }
 
     const relevantCareers = findRelevantCareers(postSecondaryPlans, interests, strongSubjects);
+
+    const proximityLabel =
+      collegeProximity === 'close_to_home' ? 'Wants to stay close to home' :
+      collegeProximity === 'weekend_distance' ? 'Wants to be close enough to come home on weekends' :
+      collegeProximity === 'ready_to_go_far' ? 'Ready to go far from home' :
+      null;
+
+    const riasecLabels = {
+      R: 'Realistic (hands-on, practical)',
+      I: 'Investigative (analytical, curious)',
+      A: 'Artistic (creative, expressive)',
+      S: 'Social (people-oriented, caring)',
+      E: 'Enterprising (leadership, persuasion)',
+      C: 'Conventional (organized, detail-oriented)',
+    };
+    const riasecContext = riasecCodes?.length > 0
+      ? `- Vocational interest profile (RIASEC): ${riasecCodes.map(c => riasecLabels[c] ?? c).join(', ')}\n`
+      : '';
+
+    const onboardingContext = (strengths?.length || riasecCodes?.length || specificCareerInterest || proximityLabel)
+      ? `\nStudent profile (from onboarding):\n${
+          riasecContext
+        }${
+          strengths?.length ? `- Things they enjoy doing: ${strengths.join(', ')}\n` : ''
+        }${
+          specificCareerInterest ? `- Specific career interest: ${specificCareerInterest}\n` : ''
+        }${
+          proximityLabel ? `- College proximity preference: ${proximityLabel}\n` : ''
+        }`
+      : '';
 
     const careerContext = relevantCareers.length > 0
       ? `Arkansas career matches based on this student's interests and goals:\n${relevantCareers.map(c =>
@@ -159,7 +189,7 @@ Your response must:
 - End with one specific, concrete action they can take this week
 
 ${careerContext}
-
+${onboardingContext}
 Never make up career data. Only reference careers from the Arkansas data provided above.
 Never mention specific GPA numbers — speak in terms of trends and momentum instead.
 Keep the response to 4-5 sentences. Be specific, not generic.`;

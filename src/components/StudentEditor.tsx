@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { AdvisoryClass, Student, StudentTeacherNotes } from '../lib/types';
+import {
+  PostSecondaryGrid,
+  RiasecCardGrid,
+  StrengthChipGrid,
+  ProximityCardSelector,
+  ProfileTextInput,
+  riasecToInterests,
+} from './StudentProfileFields';
 
 interface StudentEditorProps {
   advisoryClass: AdvisoryClass | null;
@@ -11,7 +19,7 @@ interface StudentEditorProps {
   onSaved: (student: Student) => void;
 }
 
-type Tab = 'profile' | 'advisory' | 'notes';
+type Tab = 'profile' | 'advisory' | 'notes' | 'student-profile';
 
 const postSecondaryOptions = [
   'Straight to Work', 'Military', 'Trade School / Vocational', '2-Year College', '4-Year College',
@@ -75,6 +83,14 @@ export default function StudentEditor({
   const [communityAssets, setCommunityAssets] = useState('');
   const [strengths, setStrengths] = useState<string[]>([]);
 
+  // Student Profile tab (onboarding fields — editable by advisor)
+  const [spPlans, setSpPlans] = useState<string[]>([]);
+  const [spRiasecCodes, setSpRiasecCodes] = useState<string[]>([]);
+  const [spStrengths, setSpStrengths] = useState<string[]>([]);
+  const [spCareerInterest, setSpCareerInterest] = useState('');
+  const [spProximity, setSpProximity] = useState('');
+  const [spCareerProfanityErr, setSpCareerProfanityErr] = useState<string | null>(null);
+
   const [notes, setNotes] = useState('');
   const [notesId, setNotesId] = useState<string | null>(null);
 
@@ -95,6 +111,12 @@ export default function StudentEditor({
       setCommunityAssets(studentToEdit.community_assets ?? '');
       setStrengths(studentToEdit.strengths ?? []);
 
+      setSpPlans(studentToEdit.post_secondary_plans ?? []);
+      setSpRiasecCodes(studentToEdit.riasec_codes ?? []);
+      setSpStrengths(studentToEdit.strengths ?? []);
+      setSpCareerInterest(studentToEdit.specific_career_interest ?? '');
+      setSpProximity(studentToEdit.college_proximity_preference ?? '');
+
       supabase
         .from('student_teacher_notes')
         .select('*')
@@ -111,6 +133,7 @@ export default function StudentEditor({
       setGradeLevel(''); setTargetGpa('');
       setPostSecondaryPlans([]); setInterests(''); setCareerGoals('');
       setCommunityAssets(''); setStrengths([]);
+      setSpPlans([]); setSpRiasecCodes([]); setSpStrengths([]); setSpCareerInterest(''); setSpProximity('');
       setNotes(''); setNotesId(null);
     }
     setError(null);
@@ -132,11 +155,14 @@ export default function StudentEditor({
       student_id_external: externalId.trim() || null,
       grade_level: gradeLevel.trim() || null,
       target_gpa: targetGpa.trim() === '' ? null : Number(targetGpa),
-      post_secondary_plans: postSecondaryPlans.length > 0 ? postSecondaryPlans : null,
-      interests: interests.trim() || null,
+      post_secondary_plans: spPlans.length > 0 ? spPlans : (postSecondaryPlans.length > 0 ? postSecondaryPlans : null),
+      riasec_codes: spRiasecCodes.length > 0 ? spRiasecCodes : null,
+      interests: spRiasecCodes.length > 0 ? riasecToInterests(spRiasecCodes) : (interests.trim() || null),
       career_goals: careerGoals.trim() || null,
       community_assets: communityAssets.trim() || null,
-      strengths: strengths.length > 0 ? strengths : [],
+      strengths: spStrengths.length > 0 ? spStrengths : (strengths.length > 0 ? strengths : []),
+      specific_career_interest: spCareerInterest.trim() || null,
+      college_proximity_preference: spProximity || null,
       school_id: schoolId,
       advisory_class_id: advisoryClass?.id ?? null,
       status: 'active',
@@ -173,9 +199,10 @@ export default function StudentEditor({
   };
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'profile',  label: 'Profile' },
-    { id: 'advisory', label: 'Advisory Profile' },
-    { id: 'notes',    label: 'Teacher Notes' },
+    { id: 'profile',         label: 'Profile' },
+    { id: 'advisory',        label: 'Advisory Profile' },
+    { id: 'notes',           label: 'Teacher Notes' },
+    { id: 'student-profile', label: 'Student Profile' },
   ];
 
   return (
@@ -340,6 +367,48 @@ export default function StudentEditor({
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'student-profile' && (
+            <div className="space-y-7">
+              <div className="rounded-2xl px-4 py-3 text-sm" style={{ background: 'rgba(247,197,45,0.08)', border: '1px solid rgba(247,197,45,0.3)' }}>
+                <p style={{ color: 'var(--color-text-secondary)' }}>
+                  <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>These answers were set by the student during onboarding.</span>
+                  {' '}Edit carefully.
+                </p>
+              </div>
+
+              <section>
+                <p className="mb-3 text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Post-secondary plans</p>
+                <PostSecondaryGrid value={spPlans} onChange={setSpPlans} compact />
+              </section>
+
+              <section>
+                <p className="mb-3 text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>What kind of activities feel most natural to them?</p>
+                <RiasecCardGrid value={spRiasecCodes} onChange={setSpRiasecCodes} />
+              </section>
+
+              <section>
+                <p className="mb-3 text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>What they like doing</p>
+                <StrengthChipGrid value={spStrengths} onChange={setSpStrengths} />
+              </section>
+
+              <section>
+                <p className="mb-2 text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Specific career interest</p>
+                <ProfileTextInput
+                  value={spCareerInterest}
+                  onChange={v => { setSpCareerInterest(v); setSpCareerProfanityErr(null); }}
+                  placeholder="e.g. nurse, electrician, teacher..."
+                  onProfanityDetected={() => { setSpCareerInterest(''); setSpCareerProfanityErr('Please keep this school-appropriate.'); }}
+                  profanityError={spCareerProfanityErr}
+                />
+              </section>
+
+              <section>
+                <p className="mb-3 text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>College proximity preference</p>
+                <ProximityCardSelector value={spProximity} onChange={setSpProximity} compact />
+              </section>
             </div>
           )}
 

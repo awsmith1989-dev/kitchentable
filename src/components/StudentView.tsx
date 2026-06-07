@@ -3,7 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Customized } from 'recharts';
 import AnimatedDot from './AnimatedDot';
 import AdvisorInsights from './AdvisorInsights';
+import CareerCorner from './CareerCorner';
 import SelfAssessmentModal from './SelfAssessmentModal';
+import OnboardingModal from './OnboardingModal';
+import StudentAccountSettings from './StudentAccountSettings';
 import { supabase } from '../lib/supabaseClient';
 import { ClassRecord, School, SelfAssessment, Student, StudentShoutout, WeeklyAttendance, WeeklyClassGrade, WeeklyGpaSnapshot } from '../lib/types';
 import { SHOUTOUT_CONFIG } from './ShoutoutModal';
@@ -420,6 +423,9 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
   const [shoutouts, setShoutouts] = useState<StudentShoutout[]>([]);
   const [showAllHighlights, setShowAllHighlights] = useState(false);
   const [showAssessmentModal, setShowAssessmentModal] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [advisorRefreshKey, setAdvisorRefreshKey] = useState(0);
   const [localTargetGpa, setLocalTargetGpa] = useState(0);
   const [pendingTargetGpa, setPendingTargetGpa] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -446,6 +452,7 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
         if (!studentResponse.data) throw new Error('Student record not found. The account may not be linked correctly — contact your advisor.');
         const studentRecord = studentResponse.data as Student;
         setStudent(studentRecord);
+        if (isStudentSelf && !studentRecord.onboarding_completed) setShowOnboarding(true);
 
         const [schoolResponse, gpaResponse, attendanceResponse, classGradesResponse, shoutoutsResponse] = await Promise.all([
           supabase.from('schools').select('*').eq('id', studentRecord.school_id).maybeSingle(),
@@ -843,8 +850,30 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
     );
   }
 
+  const handleStudentUpdate = (updatedStudent: Student) => {
+    setStudent(updatedStudent);
+    setAdvisorRefreshKey(k => k + 1);
+  };
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
+      {/* ── Onboarding modal (student self only, shown before dashboard loads) ── */}
+      {showOnboarding && isStudentSelf && (
+        <OnboardingModal
+          student={student}
+          onComplete={(updated) => { handleStudentUpdate(updated); setShowOnboarding(false); }}
+        />
+      )}
+
+      {/* ── Account settings slide-out ── */}
+      {showSettings && isStudentSelf && (
+        <StudentAccountSettings
+          student={student}
+          onClose={() => setShowSettings(false)}
+          onSaved={(updated) => { handleStudentUpdate(updated); setShowSettings(false); }}
+        />
+      )}
+
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* ── Welcome header ── */}
         <div
@@ -858,14 +887,28 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           </div>
           <div className="flex items-center gap-3">
             {isStudentSelf ? (
-              <button
-                type="button"
-                onClick={() => supabase.auth.signOut()}
-                className="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition"
-                style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-secondary)' }}
-              >
-                Sign out
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(true)}
+                  className="inline-flex items-center justify-center rounded-full p-2.5 transition"
+                  style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-secondary)' }}
+                  aria-label="Account settings"
+                  title="Account settings"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => supabase.auth.signOut()}
+                  className="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition"
+                  style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-secondary)' }}
+                >
+                  Sign out
+                </button>
+              </>
             ) : (
               <Link
                 to="/"
@@ -1000,6 +1043,7 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           selfAssessment={selfAssessments.filter((a) => a.school_year === activeYear).sort((a, b) => b.week_number - a.week_number)[0] ?? null}
           pathToTarget={pathToTarget}
           shoutouts={shoutouts}
+          refreshKey={advisorRefreshKey}
         />
 
         {/* ── GPA chart ── */}
@@ -1261,6 +1305,16 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
             </ResponsiveContainer>
           </div>
         </div>
+
+        {/* ── Your Next Chapter ── */}
+        <CareerCorner
+          student={student}
+          weeklyGrades={weeklyGrades}
+          classes={classes}
+          school={school}
+          activeYear={activeYear}
+          onOpenProfile={isStudentSelf ? () => setShowSettings(true) : undefined}
+        />
 
       </div>
     </div>
