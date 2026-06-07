@@ -7,3 +7,7 @@
   command = "vite"
   port = 9999
   targetPort = 5173
+
+# Quarterly O*NET bright-outlook sync — runs at midnight UTC on Jan 1, Apr 1, Jul 1, Oct 1
+[functions."sync-careers"]
+  schedule = "0 0 1 1,4,7,10 *"
