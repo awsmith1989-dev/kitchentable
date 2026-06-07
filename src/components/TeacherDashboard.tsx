@@ -3,11 +3,9 @@ import { Link } from 'react-router-dom';
 import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
-import { useTheme } from '../lib/ThemeContext';
 import AnimatedDot from './AnimatedDot';
 import StudentEditor from './StudentEditor';
 import WeeklyDataEntry from './WeeklyDataEntry';
-import ThemeToggle from './ThemeToggle';
 import { AdvisoryClass, ClassRecord, School, SelfAssessment, Student, StudentShoutout, Teacher, WeeklyAttendance, WeeklyClassGrade, WeeklyGpaSnapshot } from '../lib/types';
 import ShoutoutModal from './ShoutoutModal';
 
@@ -61,13 +59,10 @@ const defaultClassList: ClassRecord[] = [];
 const defaultGpaList: WeeklyGpaSnapshot[] = [];
 const defaultAttendanceList: WeeklyAttendance[] = [];
 
-const growthBackground = (change: number | null) => {
-  if (change === null) return 'bg-white dark:bg-slate-800/60';
-  if (change > 0.25) return 'bg-gradient-to-r from-emerald-100 to-emerald-200 dark:from-emerald-800 dark:to-emerald-700';
-  if (change > 0) return 'bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-900 dark:to-emerald-800';
-  if (change < -0.25) return 'bg-gradient-to-r from-rose-100 to-rose-200 dark:from-rose-800 dark:to-rose-700';
-  if (change < 0) return 'bg-gradient-to-r from-rose-50 to-rose-100 dark:from-rose-900 dark:to-rose-800';
-  return 'bg-slate-50 dark:bg-slate-700/40';
+const growthBackground = (change: number | null, index: number) => {
+  if (change !== null && change > 0) return 'bg-[var(--color-green-highlight)]';
+  if (change !== null && change < 0) return 'bg-[var(--color-red-highlight)]';
+  return index % 2 === 0 ? '' : 'bg-[var(--color-card-tint)]';
 };
 
 const stateOptions = [
@@ -83,19 +78,29 @@ const sortSnapshots = (a: WeeklyGpaSnapshot, b: WeeklyGpaSnapshot) => {
   return b.week_number - a.week_number;
 };
 
+const chartColors = {
+  grid: 'var(--color-border)',
+  axis: 'var(--color-text-muted)',
+  tooltipBg: 'var(--color-card)',
+  tooltipBorder: 'var(--color-border)',
+  tooltipText: 'var(--color-text-primary)',
+  tooltipItem: 'var(--color-text-secondary)',
+};
+
+const acctInputStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  borderRadius: '1rem',
+  border: '1px solid var(--color-border)',
+  background: 'var(--color-card)',
+  padding: '0.5rem 0.75rem',
+  fontSize: '0.875rem',
+  color: 'var(--color-text-primary)',
+  marginTop: '0.25rem',
+  outline: 'none',
+};
+
 export default function TeacherDashboard({ user }: TeacherDashboardProps) {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
-
-  const chartColors = {
-    grid: isDark ? '#334155' : '#e2e8f0',
-    axis: isDark ? '#64748b' : '#94a3b8',
-    tooltipBg: isDark ? '#1e293b' : '#ffffff',
-    tooltipBorder: isDark ? '#334155' : '#e2e8f0',
-    tooltipText: isDark ? '#f1f5f9' : '#0f172a',
-    tooltipItem: isDark ? '#94a3b8' : '#64748b',
-  };
-
   const [school, setSchool] = useState<School | null>(null);
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [schoolState, setSchoolState] = useState<string>('');
@@ -589,14 +594,12 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
     return summaries;
   }, [students, weeklyGpa, weeklyGrades, classes, activeYear]);
 
-  const inputCls = 'mt-1 block w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700/60 dark:text-slate-100 dark:focus:border-slate-500';
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
         <div className="flex min-h-screen items-center justify-center px-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Loading dashboard data...</p>
+          <div className="rounded-3xl p-8 shadow-sm" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
+            <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Loading dashboard data...</p>
           </div>
         </div>
       </div>
@@ -604,20 +607,20 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* ── Header ── */}
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <header className="sticky top-0 z-20 shadow-sm" style={{ background: 'var(--color-nav-bg)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="text-xs uppercase tracking-[0.28em] text-slate-700 dark:text-slate-400">The Kitchen Table</div>
-          <div className="flex flex-1 items-center justify-center gap-3 text-sm font-medium text-slate-900 dark:text-slate-100">
+          <img src="/Logo/PerchEd%20Logo%20Design-clear.png" alt="PerchEd" style={{ height: 22, width: 'auto', objectFit: 'contain' }} />
+          <div className="flex flex-1 items-center justify-center gap-3 text-sm font-medium text-white">
             <span>{school?.name ?? defaultSchool.name}</span>
           </div>
           <div className="flex items-center gap-4">
-            <ThemeToggle />
             <button
               type="button"
               onClick={() => setAccountSettingsOpen((prev) => !prev)}
-              className="flex items-center gap-1 text-sm text-slate-500 underline-offset-2 transition hover:text-slate-700 hover:underline dark:text-slate-400 dark:hover:text-slate-200"
+              className="flex items-center gap-1 text-sm transition"
+              style={{ color: 'rgba(255,255,255,0.8)' }}
             >
               {user.email ?? 'Advisor'}
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -627,7 +630,8 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
             <button
               type="button"
               onClick={handleSignOut}
-              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
+              className="rounded-full px-4 py-2 text-sm font-semibold text-white transition"
+              style={{ border: '1px solid rgba(255,255,255,0.35)' }}
             >
               Sign out
             </button>
@@ -639,13 +643,16 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
       {accountSettingsOpen ? (
         <>
           <div className="fixed inset-0 z-30 bg-black/20" onClick={() => setAccountSettingsOpen(false)} />
-          <div className="fixed inset-y-0 right-0 z-40 flex w-96 flex-col bg-white shadow-xl dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-700">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Account settings</h2>
+          <div className="fixed inset-y-0 right-0 z-40 flex w-96 flex-col shadow-xl" style={{ background: 'var(--color-card)' }}>
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>Account settings</h2>
               <button
                 type="button"
                 onClick={() => setAccountSettingsOpen(false)}
-                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                className="rounded-full p-1 transition"
+                style={{ color: 'var(--color-text-muted)' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--color-card-tint)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -654,16 +661,31 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
             </div>
             <div className="flex-1 space-y-5 overflow-y-auto px-6 py-6">
               <div>
-                <label htmlFor="account-full-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Full name</label>
-                <input id="account-full-name" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} />
+                <label htmlFor="account-full-name" className="block text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Full name</label>
+                <input
+                  id="account-full-name"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  style={acctInputStyle}
+                  onFocus={(e) => { e.target.style.borderColor = 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 2px rgba(28,125,107,0.15)'; }}
+                  onBlur={(e) => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = 'none'; }}
+                />
               </div>
               <div>
-                <p className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</p>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{user.email}</p>
+                <p className="block text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Email</p>
+                <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>{user.email}</p>
               </div>
               <div>
-                <label htmlFor="account-school-state" className="block text-sm font-medium text-slate-700 dark:text-slate-300">School state</label>
-                <select id="account-school-state" value={schoolState} onChange={(e) => setSchoolState(e.target.value)} className={inputCls}>
+                <label htmlFor="account-school-state" className="block text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>School state</label>
+                <select
+                  id="account-school-state"
+                  value={schoolState}
+                  onChange={(e) => setSchoolState(e.target.value)}
+                  style={acctInputStyle}
+                  onFocus={(e) => { e.target.style.borderColor = 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 2px rgba(28,125,107,0.15)'; }}
+                  onBlur={(e) => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = 'none'; }}
+                >
                   <option value="">Select state</option>
                   {stateOptions.map((code) => (
                     <option key={code} value={code}>{code}</option>
@@ -671,23 +693,41 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                 </select>
               </div>
               <div>
-                <label htmlFor="account-new-password" className="block text-sm font-medium text-slate-700 dark:text-slate-300">New password</label>
-                <input id="account-new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Leave blank to keep current" className={inputCls} />
+                <label htmlFor="account-new-password" className="block text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>New password</label>
+                <input
+                  id="account-new-password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Leave blank to keep current"
+                  style={acctInputStyle}
+                  onFocus={(e) => { e.target.style.borderColor = 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 2px rgba(28,125,107,0.15)'; }}
+                  onBlur={(e) => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = 'none'; }}
+                />
               </div>
               <div>
-                <label htmlFor="account-confirm-password" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Confirm password</label>
-                <input id="account-confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={inputCls} />
+                <label htmlFor="account-confirm-password" className="block text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Confirm password</label>
+                <input
+                  id="account-confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  style={acctInputStyle}
+                  onFocus={(e) => { e.target.style.borderColor = 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 2px rgba(28,125,107,0.15)'; }}
+                  onBlur={(e) => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = 'none'; }}
+                />
               </div>
               {accountError ? (
-                <p className="text-sm text-rose-700 dark:text-rose-400">{accountError}</p>
+                <p className="text-sm text-rose-700">{accountError}</p>
               ) : null}
             </div>
-            <div className="flex items-center gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-700">
+            <div className="flex items-center gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--color-border)' }}>
               <button
                 type="button"
                 onClick={handleSaveAccountSettings}
                 disabled={savingAccount}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
+                className="rounded-full px-4 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: 'var(--color-primary)' }}
               >
                 {savingAccount ? 'Saving…' : 'Save changes'}
               </button>
@@ -695,7 +735,8 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                 type="button"
                 onClick={handleCancelAccountSettings}
                 disabled={savingAccount}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                className="rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-secondary)' }}
               >
                 Cancel
               </button>
@@ -707,9 +748,17 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
       {/* ── Main content ── */}
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="pb-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">The Kitchen Table</p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-900 dark:text-slate-100">Advisor dashboard</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">Monitor advisory classes, student progress, weekly attendance, and GPA snapshots.</p>
+          <img src="/Logo/PerchEd%20Logo%20Design-clear.png" alt="PerchEd" style={{ height: 20, width: 'auto', objectFit: 'contain' }} />
+          <div className="mt-2 flex items-center gap-3">
+            <img
+              src="/mascots/mascot-desk.png"
+              alt=""
+              aria-hidden="true"
+              style={{ width: 48, height: 48, objectFit: 'contain', mixBlendMode: 'multiply', flexShrink: 0 }}
+            />
+            <h1 className="text-3xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Advisor dashboard</h1>
+          </div>
+          <p className="mt-1 max-w-2xl text-sm" style={{ color: 'var(--color-text-secondary)' }}>Monitor advisory classes, student progress, weekly attendance, and GPA snapshots.</p>
         </div>
 
         {advisoryClasses.length > 1 && (
@@ -723,11 +772,12 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                   setPanelMode('none');
                   setEditingStudent(null);
                 }}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                className="rounded-full px-4 py-2 text-sm font-semibold transition"
+                style={
                   selectedClassId === cls.id
-                    ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                }`}
+                    ? { background: 'var(--color-primary)', color: '#ffffff' }
+                    : { border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-secondary)' }
+                }
               >
                 {cls.name}
               </button>
@@ -736,23 +786,23 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
         )}
 
         {error ? (
-          <div className="mb-6 rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-400">{error}</div>
+          <div className="mb-6 rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>
         ) : null}
 
         <section className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-3xl bg-slate-900 p-6 text-white shadow-sm dark:bg-slate-700">
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Advisory class</p>
+          <div className="rounded-3xl p-6 text-white shadow-sm" style={{ background: 'var(--color-primary-dark)' }}>
+            <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'rgba(255,255,255,0.6)' }}>Advisory class</p>
             <h2 className="mt-4 text-2xl font-semibold">{advisoryClass?.name ?? defaultClass.name}</h2>
           </div>
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Students</p>
-            <p className="mt-4 text-3xl font-semibold text-slate-900 dark:text-slate-100">{students.length}</p>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Roster count for this advisory class.</p>
+          <div className="rounded-3xl p-6 shadow-sm" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
+            <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Students</p>
+            <p className="mt-4 text-3xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>{students.length}</p>
+            <p className="mt-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>Roster count for this advisory class.</p>
           </div>
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Classes</p>
-            <p className="mt-4 text-3xl font-semibold text-slate-900 dark:text-slate-100">{classes.length}</p>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Active homeroom classes this semester.</p>
+          <div className="rounded-3xl p-6 shadow-sm" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
+            <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Classes</p>
+            <p className="mt-4 text-3xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>{classes.length}</p>
+            <p className="mt-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>Active homeroom classes this semester.</p>
           </div>
         </section>
 
@@ -760,19 +810,23 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           <button
             type="button"
             onClick={() => setPanelMode('entry')}
-            className="rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
+            className="rounded-full px-5 py-3 text-sm font-semibold text-white transition"
+            style={{ background: 'var(--color-primary)' }}
           >
             Enter This Week's Data
           </button>
           <button
             type="button"
             onClick={() => handleOpenStudentEditor(null)}
-            className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            className="rounded-full px-5 py-3 text-sm font-semibold transition"
+            style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-secondary)' }}
           >
             Add Student
           </button>
           {panelMode === 'entry' && (
-            <span className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-600 dark:bg-slate-700/60 dark:text-slate-300">You are in weekly entry mode.</span>
+            <span className="rounded-full px-4 py-2 text-sm" style={{ background: 'var(--color-card-tint)', color: 'var(--color-text-secondary)' }}>
+              You are in weekly entry mode.
+            </span>
           )}
         </div>
 
@@ -795,13 +849,18 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
 
         {/* ── Charts ── */}
         <section className="mt-8 grid gap-4 xl:grid-cols-2">
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+          <div className="rounded-3xl p-6 shadow-sm" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Class GPA</p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Semester trend</h2>
+                <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Class GPA</p>
+                <h2 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Semester trend</h2>
               </div>
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.26em] text-slate-600 dark:bg-slate-700 dark:text-slate-300">{activeYear || 'No year'}</span>
+              <span
+                className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.26em]"
+                style={{ background: 'var(--color-card-tint)', color: 'var(--color-text-secondary)' }}
+              >
+                {activeYear || 'No year'}
+              </span>
             </div>
             <div className="mt-6 h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -818,7 +877,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                   <Line
                     type="monotone"
                     dataKey="avg_gpa"
-                    stroke="#0f766e"
+                    stroke="var(--color-primary)"
                     strokeWidth={3}
                     dot={(props) => <AnimatedDot {...props} highlightWeek={latestGpaWeek} />}
                     activeDot={{ r: 8 }}
@@ -831,13 +890,18 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
             </div>
           </div>
 
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+          <div className="rounded-3xl p-6 shadow-sm" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Class absences</p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Average weekly absences</h2>
+                <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Class absences</p>
+                <h2 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Average weekly absences</h2>
               </div>
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.26em] text-slate-600 dark:bg-slate-700 dark:text-slate-300">Semester width</span>
+              <span
+                className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.26em]"
+                style={{ background: 'var(--color-card-tint)', color: 'var(--color-text-secondary)' }}
+              >
+                Semester width
+              </span>
             </div>
             <div className="mt-6 h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -854,7 +918,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                   <Line
                     type="monotone"
                     dataKey="avg_absences"
-                    stroke="#be123c"
+                    stroke="var(--color-accent)"
                     strokeWidth={3}
                     dot={(props) => <AnimatedDot {...props} highlightWeek={latestAttendanceWeek} />}
                     activeDot={{ r: 8 }}
@@ -869,37 +933,45 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
         </section>
 
         {/* ── Student growth list ── */}
-        <section className="mt-8 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+        <section className="mt-8 rounded-3xl p-6 shadow-sm" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Student growth</h2>
-              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Latest GPA change and recent history for each student in this advisory.</p>
+              <h2 className="text-xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Student growth</h2>
+              <p className="mt-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>Latest GPA change and recent history for each student in this advisory.</p>
             </div>
           </div>
 
           <div className="space-y-4">
             {studentSummaries.length === 0 ? (
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-700/30 dark:text-slate-400">
+              <div className="rounded-3xl p-6 text-sm" style={{ border: '1px solid var(--color-border)', background: 'var(--color-card-tint)', color: 'var(--color-text-secondary)' }}>
                 No students found for this advisory class.
               </div>
             ) : (
-              studentSummaries.map((student) => (
+              studentSummaries.map((student, idx) => (
                 <div
                   key={student.id}
-                  className={`rounded-3xl border-2 p-4 shadow-sm ${
+                  className={`rounded-3xl p-4 shadow-sm ${student.isTopGrower ? 'bg-[#FFFBEB]' : growthBackground(student.change, idx)}`}
+                  style={
                     student.isTopGrower
-                      ? 'border-amber-400 bg-gradient-to-br from-amber-50 to-yellow-50 ring-2 ring-amber-200 dark:border-amber-600/70 dark:from-amber-900/40 dark:to-yellow-900/20 dark:ring-amber-700/40'
-                      : `border-slate-200 dark:border-slate-600/70 ${growthBackground(student.change)}`
-                  }`}
+                      ? { border: '2px solid var(--color-accent)' }
+                      : { border: '1px solid var(--color-border)' }
+                  }
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Link to={`/student/${student.id}`} className="text-lg font-semibold text-slate-900 hover:text-slate-700 dark:text-slate-100 dark:hover:text-slate-300">
+                        <Link
+                          to={`/student/${student.id}`}
+                          className="text-lg font-semibold transition"
+                          style={{ color: 'var(--color-text-primary)' }}
+                        >
                           {student.preferred_name || student.first_name} {student.last_name}
                         </Link>
                         {student.isTopGrower && (
-                          <span className="rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/50 dark:text-amber-300">
+                          <span
+                            className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                            style={{ background: 'var(--color-accent)', color: 'var(--color-accent-dark)', border: '1px solid var(--color-accent)' }}
+                          >
                             Top grower
                           </span>
                         )}
@@ -908,7 +980,10 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                             type="button"
                             onClick={() => handleOpenStudentEditor(student)}
                             title="Edit student"
-                            className="rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 dark:border-slate-600 dark:bg-slate-700/50 dark:hover:bg-slate-600 dark:hover:text-slate-200"
+                            className="rounded-full p-1.5 transition"
+                            style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-muted)' }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--color-card-tint)'; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--color-card)'; }}
                           >
                             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -918,7 +993,10 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                             type="button"
                             onClick={() => setShoutoutTarget(student)}
                             title="Give a shoutout"
-                            className="rounded-full border border-amber-200 bg-amber-50 p-1.5 text-amber-500 transition hover:bg-amber-100 hover:text-amber-700 dark:border-amber-700/50 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-800/40"
+                            className="rounded-full p-1.5 transition"
+                            style={{ border: '1px solid var(--color-accent)', background: 'var(--color-card)', color: 'var(--color-accent-dark)' }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#FFFBEB'; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--color-card)'; }}
                           >
                             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
@@ -928,11 +1006,12 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                             type="button"
                             onClick={() => toggleCheckin(student.id)}
                             title="View check-in"
-                            className={`rounded-full border p-1.5 transition ${
+                            className="rounded-full p-1.5 transition"
+                            style={
                               openCheckins.has(student.id)
-                                ? 'border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-700/50 dark:bg-blue-900/30 dark:text-blue-400'
-                                : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-600 dark:border-slate-600 dark:bg-slate-700/50 dark:hover:bg-slate-600 dark:hover:text-slate-300'
-                            }`}
+                                ? { border: '1px solid var(--color-primary)', background: 'var(--color-card-tint)', color: 'var(--color-primary)' }
+                                : { border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-muted)' }
+                            }
                           >
                             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -940,15 +1019,23 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                           </button>
                         </div>
                       </div>
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                         {student.student_id_external ?? 'No external ID'}
                         {student.grade_level ? ` · Grade ${student.grade_level}` : ''}
                       </p>
                     </div>
                     <div className="space-y-1 text-right">
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Latest GPA</p>
-                      <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{student.latestGpa?.toFixed(2) ?? '—'}</p>
-                      <p className={`text-sm font-semibold ${student.change === null ? 'text-slate-500 dark:text-slate-400' : student.change > 0 ? 'text-emerald-700 dark:text-emerald-400' : student.change < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                      <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Latest GPA</p>
+                      <p className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>{student.latestGpa?.toFixed(2) ?? '—'}</p>
+                      <p
+                        className="text-sm font-semibold"
+                        style={{
+                          color: student.change === null ? 'var(--color-text-muted)'
+                            : student.change > 0 ? '#1a6b50'
+                            : student.change < 0 ? '#9B3535'
+                            : 'var(--color-text-muted)'
+                        }}
+                      >
                         {student.change === null
                           ? 'No prior data'
                           : student.change > 0
@@ -961,7 +1048,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                   </div>
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <p className="text-sm italic text-slate-600 dark:text-slate-400">{student.callout}</p>
+                    <p className="text-sm italic" style={{ color: 'var(--color-text-secondary)' }}>{student.callout}</p>
                   </div>
 
                   {openCheckins.has(student.id) && (() => {
@@ -969,20 +1056,27 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
                       (s) => s.student_id === student.id && s.school_year === activeYear && s.week_number === latestGpaWeek
                     );
                     if (!a) return (
-                      <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">No check-in submitted this week.</p>
+                      <p className="mt-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>No check-in submitted this week.</p>
                     );
                     const academic = a.academic_self_assessment;
-                    const academicChip = academic === 'better'
-                      ? { label: '↑ Better', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-700/50' }
-                      : academic === 'same'
-                        ? { label: '→ Same', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:border-amber-700/50' }
-                        : { label: '↓ Tough week', cls: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/50 dark:text-rose-300 dark:border-rose-700/50' };
+                    const academicChip =
+                      academic === 'better'
+                        ? { label: '↑ Better', bg: 'var(--color-green-highlight)', color: '#1a6b50', border: '#a7f0d8' }
+                        : academic === 'same'
+                        ? { label: '→ Same', bg: '#FFFBEB', color: 'var(--color-accent-dark)', border: 'var(--color-accent)' }
+                        : { label: '↓ Tough week', bg: 'var(--color-red-highlight)', color: '#9B3535', border: '#f5b8b8' };
                     return (
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${academicChip.cls}`}>
+                        <span
+                          className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                          style={{ background: academicChip.bg, color: academicChip.color, border: `1px solid ${academicChip.border}` }}
+                        >
                           {academicChip.label}
                         </span>
-                        <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                        <span
+                          className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                          style={{ background: 'var(--color-card-tint)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
+                        >
                           Effort: {a.effort_rating}/5
                         </span>
                       </div>

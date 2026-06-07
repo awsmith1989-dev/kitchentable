@@ -36,7 +36,6 @@ export default function AdvisorInsights({
     setError(null);
 
     try {
-      // GPA trend
       const snapshots = weeklyGpa
         .filter((row) => row.student_id === student.id && row.school_year === activeYear)
         .sort((a, b) => a.week_number - b.week_number);
@@ -45,14 +44,11 @@ export default function AdvisorInsights({
       const previousGpa = snapshots[snapshots.length - 2]?.gpa ?? null;
       const gpaTrend =
         latestGpa !== null && previousGpa !== null
-          ? latestGpa > previousGpa
-            ? 'growing'
-            : latestGpa < previousGpa
-              ? 'declining'
-              : 'stable'
+          ? latestGpa > previousGpa ? 'growing'
+            : latestGpa < previousGpa ? 'declining'
+            : 'stable'
           : 'stable';
 
-      // Attendance — most recent week with data
       const studentAttendance = weeklyAttendance.filter(
         (row) => row.student_id === student.id && row.school_year === activeYear
       );
@@ -61,24 +57,32 @@ export default function AdvisorInsights({
         .filter((r) => r.week_number === latestAttendanceWeek)
         .reduce((sum, r) => sum + Number(r.absent_days), 0);
       const attendanceSummary =
-        latestAttendanceWeek === 0
-          ? 'no attendance data yet'
-          : absencesThisWeek >= 5
-            ? 'high absences this week'
-            : absencesThisWeek === 0
-              ? 'near-perfect attendance'
-              : 'a few missed days this week';
+        latestAttendanceWeek === 0 ? 'no attendance data yet'
+          : absencesThisWeek >= 5 ? 'high absences this week'
+          : absencesThisWeek === 0 ? 'near-perfect attendance'
+          : 'a few missed days this week';
 
-      // Subject performance — only include if we have real week-over-week data
       const studentGrades = weeklyGrades.filter(
         (g) => g.student_id === student.id && g.school_year === activeYear
       );
       const latestGradeWeek = studentGrades.reduce((max, g) => Math.max(max, g.week_number), 0);
       const subjectNotes: string[] = [];
+      let bestSubject: string | null = null;
+      let secondBestSubject: string | null = null;
 
       if (latestGradeWeek > 0) {
         const currentWeek = studentGrades.filter((g) => g.week_number === latestGradeWeek);
         const prevWeek = studentGrades.filter((g) => g.week_number === latestGradeWeek - 1);
+
+        const sortedByGrade = [...currentWeek]
+          .filter(g => g.grade_points != null)
+          .sort((a, b) => (b.grade_points ?? 0) - (a.grade_points ?? 0));
+        const getSubjectName = (classId: string) => {
+          const cls = classes.find(c => c.id === classId);
+          return cls?.subject || cls?.name || null;
+        };
+        bestSubject = sortedByGrade[0] ? getSubjectName(sortedByGrade[0].class_id) : null;
+        secondBestSubject = sortedByGrade[1] ? getSubjectName(sortedByGrade[1].class_id) : null;
 
         currentWeek.forEach((row) => {
           const cls = classes.find((c) => c.id === row.class_id);
@@ -112,7 +116,6 @@ export default function AdvisorInsights({
         ? `Identified strengths: ${student.strengths.join(', ')}.`
         : '';
 
-      // Shoutout history — recent highlights + pattern detection
       const shoutoutLines: string[] = [];
       if (shoutouts && shoutouts.length > 0) {
         shoutoutLines.push('Recent highlights from advisor:');
@@ -182,7 +185,12 @@ Rules:
       const response = await fetch('/.netlify/functions/advisor-insight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({
+          prompt,
+          postSecondaryPlans: student.post_secondary_plans,
+          interests: student.interests,
+          strongSubjects: [bestSubject, secondBestSubject].filter(Boolean),
+        }),
       });
 
       if (!response.ok) {
@@ -200,7 +208,6 @@ Rules:
         typeof data.completion === 'string' ? data.completion :
         null;
 
-      // Strip any leading markdown heading the model might add despite instructions
       const cleaned = insightText
         ?.replace(/^#+\s+[^\n]*\n+/, '')
         .trim();
@@ -219,17 +226,36 @@ Rules:
   }, [student.id, activeYear]);
 
   return (
-    <div className="mt-8 rounded-[2rem] border-2 border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50 p-6 shadow-sm dark:border-slate-600 dark:from-slate-800/60 dark:to-slate-800/40">
+    <div
+      className="mt-8 rounded-[2rem] p-6 shadow-sm"
+      style={{
+        background: 'var(--color-card-tint)',
+        border: '2px dashed rgba(28,125,107,0.4)',
+      }}
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">AI-Generated Insight</p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-900 dark:text-slate-100">Advisor Insights</h3>
+        <div className="flex items-center gap-3">
+          <img
+            src="/mascots/mascot-advisor.png"
+            alt=""
+            aria-hidden="true"
+            style={{ width: 64, height: 64, objectFit: 'contain', mixBlendMode: 'multiply', flexShrink: 0 }}
+          />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>AI-Generated Insight</p>
+            <h3 className="mt-2 text-xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Advisor Insights</h3>
+          </div>
         </div>
         <button
           type="button"
           disabled={loading}
           onClick={generateInsight}
-          className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+          className="rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50"
+          style={{
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-card)',
+            color: 'var(--color-text-secondary)',
+          }}
         >
           {loading ? 'Generating…' : 'Refresh insight'}
         </button>
@@ -238,18 +264,18 @@ Rules:
       <div className="mt-4">
         {loading ? (
           <div className="space-y-2">
-            <div className="h-4 w-full animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
-            <div className="h-4 w-5/6 animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
-            <div className="h-4 w-4/5 animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
+            <div className="h-4 w-full animate-pulse rounded" style={{ background: 'var(--color-border)' }}></div>
+            <div className="h-4 w-5/6 animate-pulse rounded" style={{ background: 'var(--color-border)' }}></div>
+            <div className="h-4 w-4/5 animate-pulse rounded" style={{ background: 'var(--color-border)' }}></div>
           </div>
         ) : error ? (
-          <p className="text-sm text-rose-700 dark:text-rose-400">{error}</p>
+          <p className="text-sm text-rose-700">{error}</p>
         ) : insight ? (
-          <p className="text-base leading-relaxed text-slate-700 dark:text-slate-300">{insight}</p>
+          <p className="text-base leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{insight}</p>
         ) : null}
       </div>
 
-      <p className="mt-4 text-xs text-slate-500 dark:text-slate-500">
+      <p className="mt-4 text-xs" style={{ color: 'var(--color-text-muted)' }}>
         This insight is AI-generated based on your academic progress, attendance, and profile information. It's meant to inspire and encourage, not to replace conversations with your advisor.
       </p>
     </div>

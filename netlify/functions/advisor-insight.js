@@ -1,4 +1,98 @@
+import { arkansasCareers } from './arkansas-careers.js';
+
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+
+function findRelevantCareers(postSecondaryPlans, interests, strongSubjects) {
+  const results = [];
+  const interestsLower = (interests || '').toLowerCase();
+  const subjectsLower = (strongSubjects || []).join(' ').toLowerCase();
+  const combined = interestsLower + ' ' + subjectsLower;
+
+  const includeHighSchool = postSecondaryPlans?.includes('Straight to Work') ||
+                             postSecondaryPlans?.includes('Military');
+  const includeAssociate = postSecondaryPlans?.includes('2-Year College') ||
+                            postSecondaryPlans?.includes('Trade School / Vocational');
+  const includeBachelor = postSecondaryPlans?.includes('4-Year College');
+
+  const keywords = {
+    health: ['health', 'medicine', 'nursing', 'doctor', 'medical', 'hospital', 'biology', 'science'],
+    tech: ['computer', 'coding', 'technology', 'software', 'data', 'programming', 'gaming', 'robotics'],
+    business: ['business', 'entrepreneur', 'sales', 'marketing', 'management', 'finance', 'money'],
+    education: ['teach', 'school', 'education', 'kids', 'children', 'tutor'],
+    arts: ['art', 'design', 'creative', 'music', 'writing', 'media', 'film'],
+    trades: ['weld', 'build', 'construct', 'mechanical', 'electric', 'plumb', 'hvac', 'car', 'engine'],
+    social: ['social work', 'community', 'counseling', 'mental health', 'nonprofit', 'people'],
+    law: ['law', 'legal', 'criminal', 'police', 'justice', 'court'],
+    environment: ['environment', 'nature', 'agriculture', 'farm', 'outdoor', 'conservation'],
+    culinary: ['cook', 'food', 'restaurant', 'culinary', 'chef', 'bake'],
+    sports: ['sports', 'athletic', 'fitness', 'physical therapy', 'kinesiology', 'basketball', 'football'],
+  };
+
+  const matchedCategories = Object.entries(keywords)
+    .filter(([, words]) => words.some(w => combined.includes(w)))
+    .map(([cat]) => cat);
+
+  const careerCategories = {
+    health: ['Registered Nurses', 'Dental Hygienists', 'Respiratory Therapists',
+             'Diagnostic Medical Sonographers', 'Physical Therapist Assistants',
+             'Occupational Therapy Assistants', 'Cardiovascular Technologists and Technicians',
+             'Medical and Health Services Managers', 'Dietitians and Nutritionists',
+             'Substance Abuse and Mental Health Counselors', 'Nuclear Medicine Technologists'],
+    tech: ['Software Developers', 'Information Security Analysts', 'Data Scientists',
+           'Computer and Information Systems Managers', 'Computer Systems Analysts',
+           'Network and Computer Systems Administrators', 'Web Developers',
+           'Computer Network Architects', 'Database Administrators'],
+    business: ['Marketing Managers', 'Sales Managers', 'Financial Managers',
+               'Management Analysts', 'Personal Financial Advisors', 'Accountants and Auditors',
+               'Human Resources Managers', 'Project Management Specialists', 'Chief Executives',
+               'Training and Development Managers', 'Logisticians'],
+    education: ['Elementary School Teachers', 'Middle School Teachers', 'Secondary School Teachers',
+                'Preschool Teachers (except special education)', 'Substance Abuse and Mental Health Counselors'],
+    arts: ['Graphic Designers', 'Web and Digital Interface Designers', 'Writers and Authors',
+           'Web Developers'],
+    trades: ['Electricians', 'Plumbers, Pipefitters and Steamfitters', 'Carpenters',
+             'Sheet Metal Workers', 'Millwrights', 'Automotive Body and Related Repairers',
+             'Farm Equipment Mechanics and Service Technicians', 'Brickmasons and Blockmasons'],
+    social: ['Social Workers', 'Substance Abuse and Mental Health Counselors',
+             'Social and Community Service Managers', 'Child Care Workers',
+             'Recreational Therapists'],
+    law: ['Police and Sheriffs Patrol Officers', 'Paralegal and Legal Assistants'],
+    environment: ['Environmental Engineers', 'Agricultural Technicians',
+                  'Farm Equipment Mechanics and Service Technicians'],
+    culinary: ['Chefs and Head Cooks', 'Food Service Managers', 'Food Science Technicians'],
+    sports: ['Physical Therapist Assistants', 'Occupational Therapy Assistants',
+             'Recreational Therapists'],
+  };
+
+  const allCareers = [
+    ...arkansasCareers.highSchoolDiploma.map(c => ({ ...c, level: 'High School Diploma' })),
+    ...arkansasCareers.associateDegree.map(c => ({ ...c, level: 'Associate Degree' })),
+    ...arkansasCareers.bachelorsDegree.map(c => ({ ...c, level: "Bachelor's Degree" })),
+  ];
+
+  matchedCategories.forEach(cat => {
+    const catCareers = careerCategories[cat] || [];
+    catCareers.forEach(title => {
+      const career = allCareers.find(c => c.title === title);
+      if (!career) return;
+      const levelMatch =
+        (career.level === 'High School Diploma' && includeHighSchool) ||
+        (career.level === 'Associate Degree' && includeAssociate) ||
+        (career.level === "Bachelor's Degree" && includeBachelor) ||
+        !postSecondaryPlans?.length;
+      if (levelMatch && !results.find(r => r.title === title)) {
+        results.push(career);
+      }
+    });
+  });
+
+  const outlookOrder = { AA: 0, A: 1, BA: 2, D: 3 };
+  results.sort((a, b) =>
+    (outlookOrder[a.outlook] - outlookOrder[b.outlook]) || ((b.wage ?? 0) - (a.wage ?? 0))
+  );
+
+  return results.slice(0, 4);
+}
 
 export const handler = async (event) => {
   const headers = {
@@ -27,7 +121,7 @@ export const handler = async (event) => {
   }
 
   try {
-    const { prompt } = JSON.parse(event.body || '{}');
+    const { prompt, postSecondaryPlans, interests, strongSubjects } = JSON.parse(event.body || '{}');
 
     if (!prompt) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing prompt' }) };
@@ -42,6 +136,34 @@ export const handler = async (event) => {
       };
     }
 
+    const relevantCareers = findRelevantCareers(postSecondaryPlans, interests, strongSubjects);
+
+    const careerContext = relevantCareers.length > 0
+      ? `Arkansas career matches based on this student's interests and goals:\n${relevantCareers.map(c =>
+          `- ${c.title} | Education: ${c.level} | Arkansas workers: ${c.workers?.toLocaleString() ?? 'N/A'} | Job outlook: ${c.outlook} (${arkansasCareers.outlookLabels[c.outlook]}) | Median annual wage: $${c.wage?.toLocaleString() ?? 'N/A'}`
+        ).join('\n')}`
+      : '';
+
+    const systemPrompt = `You are a warm, encouraging advisory advisor for a K-12 student in Arkansas.
+You have access to real Arkansas labor market data from the 2025-2026 Arkansas Next career guide.
+
+Your response must:
+- Be 4-5 sentences maximum
+- Speak directly to the student in second person ("You", "Your")
+- Lead with a genuine strength or celebration
+- Reference at least one specific Arkansas career by name, including its median wage and job outlook
+- Connect the student's academic strengths in specific subjects to career requirements where relevant
+- Connect their GPA trend to their career readiness in a constructive way
+- If their GPA is below 2.5 and they want a 4-year college path, gently note that there are strong 2-year college and trade pathways that could also lead to great outcomes
+- Use warm, asset-based language — never shame or deficit framing
+- End with one specific, concrete action they can take this week
+
+${careerContext}
+
+Never make up career data. Only reference careers from the Arkansas data provided above.
+Never mention specific GPA numbers — speak in terms of trends and momentum instead.
+Keep the response to 4-5 sentences. Be specific, not generic.`;
+
     const response = await fetch(ANTHROPIC_API_URL, {
       method: 'POST',
       headers: {
@@ -52,19 +174,8 @@ export const handler = async (event) => {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
-        system: `You are a warm, encouraging academic advisor speaking directly to a student. Your insights should:
-- Celebrate strengths and progress
-- Connect academic data to real interests and goals
-- Be asset-based and never shame-focused
-- Provide one actionable suggestion
-- Stay brief (3-4 sentences)
-- Avoid mentioning specific grades or numbers; instead speak about trends and strengths`,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
+        system: systemPrompt,
+        messages: [{ role: 'user', content: prompt }],
       }),
     });
 

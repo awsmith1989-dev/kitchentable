@@ -24,14 +24,44 @@ const strengthCategories = [
   { label: 'Unique',    items: ['Hard worker', 'Never gives up', 'Shows up every day', 'Lifts others up', 'Has a big heart', 'Sees the big picture', 'Thinks outside the box', 'Makes people feel welcome'] },
 ];
 
-const inputCls = 'w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-slate-600 dark:bg-slate-700/60 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-slate-500';
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  borderRadius: '1rem',
+  border: '1px solid var(--color-border)',
+  background: 'var(--color-card)',
+  padding: '0.75rem 1rem',
+  fontSize: '0.875rem',
+  color: 'var(--color-text-primary)',
+  outline: 'none',
+};
+
+function StyledInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      style={{ ...inputStyle, ...(props.style ?? {}) }}
+      onFocus={(e) => { e.target.style.borderColor = 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 2px rgba(28,125,107,0.15)'; props.onFocus?.(e); }}
+      onBlur={(e) => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = 'none'; props.onBlur?.(e); }}
+    />
+  );
+}
+
+function StyledTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      style={{ ...inputStyle, resize: 'vertical', ...(props.style ?? {}) }}
+      onFocus={(e) => { e.target.style.borderColor = 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 2px rgba(28,125,107,0.15)'; props.onFocus?.(e); }}
+      onBlur={(e) => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = 'none'; props.onBlur?.(e); }}
+    />
+  );
+}
 
 export default function StudentEditor({
   advisoryClass, schoolId, teacherId, studentToEdit, onClose, onSaved,
 }: StudentEditorProps) {
   const [activeTab, setActiveTab] = useState<Tab>('profile');
 
-  // Tab 1 — Profile
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [preferredName, setPreferredName] = useState('');
@@ -39,14 +69,12 @@ export default function StudentEditor({
   const [gradeLevel, setGradeLevel] = useState('');
   const [targetGpa, setTargetGpa] = useState('');
 
-  // Tab 2 — Advisory Profile
   const [postSecondaryPlans, setPostSecondaryPlans] = useState<string[]>([]);
   const [interests, setInterests] = useState('');
   const [careerGoals, setCareerGoals] = useState('');
   const [communityAssets, setCommunityAssets] = useState('');
   const [strengths, setStrengths] = useState<string[]>([]);
 
-  // Tab 3 — Teacher Notes
   const [notes, setNotes] = useState('');
   const [notesId, setNotesId] = useState<string | null>(null);
 
@@ -152,16 +180,16 @@ export default function StudentEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-800">
+      <div className="absolute inset-0" style={{ background: 'rgba(27,58,92,0.5)' }} onClick={onClose} />
+      <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl shadow-2xl" style={{ background: 'var(--color-card)' }}>
 
         {/* Modal header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5 dark:border-slate-700">
+        <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>
               {studentToEdit ? 'Edit student' : 'Add student'}
             </p>
-            <h2 className="mt-0.5 text-xl font-semibold text-slate-900 dark:text-slate-100">
+            <h2 className="mt-0.5 text-xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
               {studentToEdit
                 ? `${studentToEdit.preferred_name || studentToEdit.first_name} ${studentToEdit.last_name}`
                 : 'New student'}
@@ -170,7 +198,10 @@ export default function StudentEditor({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+            className="rounded-full p-2 transition"
+            style={{ color: 'var(--color-text-muted)' }}
+            onMouseEnter={(e) => { (e.target as HTMLElement).style.background = 'var(--color-card-tint)'; }}
+            onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'transparent'; }}
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -179,17 +210,18 @@ export default function StudentEditor({
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-100 bg-slate-50 px-6 dark:border-slate-700 dark:bg-slate-800/80">
+        <div className="flex px-6" style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-card-tint)' }}>
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`mr-6 border-b-2 px-1 py-3 text-sm font-semibold transition ${
+              className="mr-6 border-b-2 px-1 py-3 text-sm font-semibold transition"
+              style={
                 activeTab === tab.id
-                  ? 'border-slate-900 text-slate-900 dark:border-slate-200 dark:text-slate-100'
-                  : 'border-transparent text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
-              }`}
+                  ? { borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }
+                  : { borderColor: 'transparent', color: 'var(--color-text-muted)' }
+              }
             >
               {tab.label}
             </button>
@@ -198,7 +230,7 @@ export default function StudentEditor({
 
         {/* Error */}
         {error && (
-          <div className="mx-6 mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-400">
+          <div className="mx-6 mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </div>
         )}
@@ -206,46 +238,42 @@ export default function StudentEditor({
         {/* Tab content */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
 
-          {/* ── Tab 1: Profile ── */}
           {activeTab === 'profile' && (
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
-                  <span className="font-medium">First name</span>
-                  <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputCls} />
-                </label>
-                <label className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
-                  <span className="font-medium">Last name</span>
-                  <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputCls} />
-                </label>
-                <label className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
-                  <span className="font-medium">Preferred name</span>
-                  <input type="text" value={preferredName} onChange={(e) => setPreferredName(e.target.value)} placeholder="If different from first name" className={inputCls} />
-                </label>
-                <label className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
-                  <span className="font-medium">Student ID</span>
-                  <input type="text" value={externalId} onChange={(e) => setExternalId(e.target.value)} className={inputCls} />
-                </label>
-                <label className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
-                  <span className="font-medium">Grade level</span>
-                  <input type="text" value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} placeholder="e.g., 10, 11, 12" className={inputCls} />
-                </label>
-                <label className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
+                {[
+                  { label: 'First name', value: firstName, onChange: setFirstName, placeholder: '' },
+                  { label: 'Last name', value: lastName, onChange: setLastName, placeholder: '' },
+                  { label: 'Preferred name', value: preferredName, onChange: setPreferredName, placeholder: 'If different from first name' },
+                  { label: 'Student ID', value: externalId, onChange: setExternalId, placeholder: '' },
+                  { label: 'Grade level', value: gradeLevel, onChange: setGradeLevel, placeholder: 'e.g., 10, 11, 12' },
+                ].map(({ label, value, onChange, placeholder }) => (
+                  <label key={label} className="space-y-1.5 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                    <span className="font-medium">{label}</span>
+                    <StyledInput type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+                  </label>
+                ))}
+                <label className="space-y-1.5 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                   <span className="font-medium">Target GPA</span>
-                  <input type="text" inputMode="decimal" value={targetGpa} onChange={(e) => setTargetGpa(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" className={inputCls} />
+                  <StyledInput
+                    type="text"
+                    inputMode="decimal"
+                    value={targetGpa}
+                    onChange={(e) => setTargetGpa(e.target.value.replace(/[^0-9.]/g, ''))}
+                    placeholder="0.00"
+                  />
                 </label>
               </div>
             </div>
           )}
 
-          {/* ── Tab 2: Advisory Profile ── */}
           {activeTab === 'advisory' && (
             <div className="space-y-6">
               <div>
-                <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">Post-secondary plans</p>
+                <p className="mb-2 text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Post-secondary plans</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {postSecondaryOptions.map((option) => (
-                    <label key={option} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                    <label key={option} className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                       <input
                         type="checkbox"
                         checked={postSecondaryPlans.includes(option)}
@@ -254,7 +282,8 @@ export default function StudentEditor({
                             ? [...postSecondaryPlans, option]
                             : postSecondaryPlans.filter((p) => p !== option));
                         }}
-                        className="rounded border border-slate-300 dark:border-slate-500"
+                        className="rounded"
+                        style={{ borderColor: 'var(--color-border)', accentColor: 'var(--color-primary)' }}
                       />
                       <span>{option}</span>
                     </label>
@@ -262,32 +291,32 @@ export default function StudentEditor({
                 </div>
               </div>
 
-              <label className="block space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <label className="block space-y-1.5 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 <span className="font-medium">Interests and hobbies</span>
-                <textarea value={interests} onChange={(e) => setInterests(e.target.value)} placeholder="e.g., Basketball, wants to study medicine, interested in video games" rows={3} className={inputCls} />
+                <StyledTextarea value={interests} onChange={(e) => setInterests(e.target.value)} placeholder="e.g., Basketball, wants to study medicine, interested in video games" rows={3} />
               </label>
 
-              <label className="block space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <label className="block space-y-1.5 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 <span className="font-medium">Career goals</span>
-                <textarea value={careerGoals} onChange={(e) => setCareerGoals(e.target.value)} placeholder="What does this student want to do or become?" rows={3} className={inputCls} />
+                <StyledTextarea value={careerGoals} onChange={(e) => setCareerGoals(e.target.value)} placeholder="What does this student want to do or become?" rows={3} />
               </label>
 
-              <label className="block space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <label className="block space-y-1.5 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 <span className="font-medium">Community assets</span>
-                <textarea value={communityAssets} onChange={(e) => setCommunityAssets(e.target.value)} placeholder="Family background, community involvement, cultural strengths..." rows={3} className={inputCls} />
+                <StyledTextarea value={communityAssets} onChange={(e) => setCommunityAssets(e.target.value)} placeholder="Family background, community involvement, cultural strengths..." rows={3} />
               </label>
 
               <div>
-                <p className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                <p className="mb-3 text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
                   Strengths
                   {strengths.length > 0 && (
-                    <span className="ml-2 text-xs font-normal text-slate-400 dark:text-slate-500">{strengths.length} selected</span>
+                    <span className="ml-2 text-xs font-normal" style={{ color: 'var(--color-text-muted)' }}>{strengths.length} selected</span>
                   )}
                 </p>
                 <div className="space-y-3">
                   {strengthCategories.map((category) => (
                     <div key={category.label}>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">{category.label}</p>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: 'var(--color-text-muted)' }}>{category.label}</p>
                       <div className="flex flex-wrap gap-2">
                         {category.items.map((strength) => (
                           <button
@@ -296,11 +325,12 @@ export default function StudentEditor({
                             onClick={() => setStrengths((prev) =>
                               prev.includes(strength) ? prev.filter((s) => s !== strength) : [...prev, strength]
                             )}
-                            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                            className="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+                            style={
                               strengths.includes(strength)
-                                ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
-                                : 'border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300 dark:hover:bg-slate-600'
-                            }`}
+                                ? { background: 'var(--color-primary)', color: '#ffffff', border: '1px solid var(--color-primary)' }
+                                : { background: 'var(--color-card)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }
+                            }
                           >
                             {strength}
                           </button>
@@ -313,32 +343,32 @@ export default function StudentEditor({
             </div>
           )}
 
-          {/* ── Tab 3: Teacher Notes ── */}
           {activeTab === 'notes' && (
             <div className="space-y-4">
-              <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-700/40">
-                <svg className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="flex items-start gap-3 rounded-2xl px-4 py-3" style={{ border: '1px solid var(--color-border)', background: 'var(--color-card-tint)' }}>
+                <svg className="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: 'var(--color-text-muted)' }}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">Private notes — not visible to student.</span>
+                <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                  <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Private notes — not visible to student.</span>
                   {' '}Use this space for observations, context, or anything that should stay between you and the student record.
                 </p>
               </div>
-              <label className="block space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <label className="block space-y-1.5 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 <span className="font-medium">Your notes</span>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observations, family context, IEP notes, check-in history, anything relevant..." rows={10} className={inputCls} />
+                <StyledTextarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observations, family context, IEP notes, check-in history, anything relevant..." rows={10} />
               </label>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 dark:border-slate-700">
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderTop: '1px solid var(--color-border)' }}>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+            className="rounded-full px-4 py-2 text-sm font-semibold transition"
+            style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-secondary)' }}
           >
             Cancel
           </button>
@@ -346,7 +376,8 @@ export default function StudentEditor({
             type="button"
             disabled={saving}
             onClick={handleSubmit}
-            className="rounded-full bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
+            className="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ background: 'var(--color-primary)' }}
           >
             {saving ? 'Saving…' : 'Save student'}
           </button>

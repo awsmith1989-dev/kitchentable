@@ -1,22 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceLine, Legend, Customized } from 'recharts';
+import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Customized } from 'recharts';
 import AnimatedDot from './AnimatedDot';
 import AdvisorInsights from './AdvisorInsights';
 import SelfAssessmentModal from './SelfAssessmentModal';
-import ThemeToggle from './ThemeToggle';
 import { supabase } from '../lib/supabaseClient';
-import { useTheme } from '../lib/ThemeContext';
 import { ClassRecord, School, SelfAssessment, Student, StudentShoutout, WeeklyAttendance, WeeklyClassGrade, WeeklyGpaSnapshot } from '../lib/types';
 import { SHOUTOUT_CONFIG } from './ShoutoutModal';
-
-type ColorScheme = 'streak' | 'attendance' | 'gpa' | 'fallback';
 
 interface Celebration {
   emoji: string;
   headline: string;
   subtext: string;
-  colorScheme: ColorScheme;
 }
 
 interface CelebrationInput {
@@ -88,7 +83,6 @@ function getCelebration({
     emoji: '🔥',
     headline: `${gpaStreak}-week growth streak — you're on a roll, ${name}!`,
     subtext: `Your GPA has gone up ${gpaStreak} weeks in a row. Keep this momentum going.`,
-    colorScheme: 'streak',
   };
 
   let attendanceStreak = 0;
@@ -102,7 +96,6 @@ function getCelebration({
     emoji: '⭐',
     headline: `${attendanceStreak} weeks of perfect attendance!`,
     subtext: `Showing up is the foundation of everything else — and you're nailing it.`,
-    colorScheme: 'attendance',
   };
 
   let bestSubjectStreak = { subject: '', streak: 0 };
@@ -118,7 +111,6 @@ function getCelebration({
     emoji: '📈',
     headline: `${bestSubjectStreak.subject} is on fire — ${bestSubjectStreak.streak} weeks of improvement!`,
     subtext: `Something is clicking in ${bestSubjectStreak.subject}. Keep doing what you're doing.`,
-    colorScheme: 'streak',
   };
 
   const latestGpaSnap = gpaSnapshots[gpaSnapshots.length - 1] ?? null;
@@ -128,7 +120,6 @@ function getCelebration({
     emoji: '📊',
     headline: `Your GPA went up this week, ${name}!`,
     subtext: `You moved the needle. That's what this is all about.`,
-    colorScheme: 'gpa',
   };
 
   let bigMove: { subject: string; delta: number } | null = null;
@@ -143,21 +134,18 @@ function getCelebration({
     emoji: '🎯',
     headline: `Big move in ${bigMove.subject} this week!`,
     subtext: `You jumped ${Math.round(bigMove.delta)} points in ${bigMove.subject} — that kind of progress adds up fast.`,
-    colorScheme: 'gpa',
   };
 
   if (absencesByWeek.get(currentWeekNumber) === 0) return {
     emoji: '✅',
     headline: `Perfect attendance this week!`,
     subtext: `You were here every single day. That matters more than you think.`,
-    colorScheme: 'attendance',
   };
 
   if (latestAssessment && latestAssessment.week_number === currentWeekNumber && latestAssessment.effort_rating >= 4) return {
     emoji: '💪',
     headline: `You said you gave a lot this week.`,
     subtext: `That effort is going to show up in your grades — keep it going.`,
-    colorScheme: 'streak',
   };
 
   const weekOneSnap = gpaSnapshots.find((r) => r.week_number === 1) ?? null;
@@ -167,17 +155,15 @@ function getCelebration({
       emoji: '📈',
       headline: `You've grown ${growth} points since Week 1, ${name}!`,
       subtext: `That's real progress over real time.`,
-      colorScheme: 'gpa',
     };
   }
 
-  let totalAbsences = 0;
-  absencesByWeek.forEach((v) => { totalAbsences += v; });
-  if (absencesByWeek.size > 0 && totalAbsences <= 3) return {
+  let totalAbsencesCheck = 0;
+  absencesByWeek.forEach((v) => { totalAbsencesCheck += v; });
+  if (absencesByWeek.size > 0 && totalAbsencesCheck <= 3) return {
     emoji: '⭐',
     headline: `Outstanding attendance this semester!`,
     subtext: `You've barely missed a day — that consistency is a superpower.`,
-    colorScheme: 'attendance',
   };
 
   for (const { subject, history } of gradesByClass.values()) {
@@ -188,7 +174,6 @@ function getCelebration({
       emoji: '🏆',
       headline: `${subject} is at its best point all semester!`,
       subtext: `Week ${currentWeekNumber} is your personal best in ${subject} — remember this feeling.`,
-      colorScheme: 'gpa',
     };
   }
 
@@ -197,16 +182,8 @@ function getCelebration({
     emoji: '📅',
     headline: `You have ${weeksLeft} weeks left to shape how this semester ends, ${name}.`,
     subtext: `Every week is a chance to move the needle. What will this week be?`,
-    colorScheme: 'fallback',
   };
 }
-
-const celebrationGradients: Record<ColorScheme, { light: string; dark: string }> = {
-  streak:     { light: 'from-amber-500 to-orange-500',   dark: 'from-amber-600 to-orange-600' },
-  attendance: { light: 'from-teal-500 to-cyan-600',      dark: 'from-teal-600 to-cyan-700' },
-  gpa:        { light: 'from-emerald-500 to-teal-600',   dark: 'from-emerald-600 to-teal-700' },
-  fallback:   { light: 'from-slate-600 to-slate-700',    dark: 'from-slate-500 to-slate-600' },
-};
 
 // ─── calculatePathToTarget ───────────────────────────────────────────────────
 
@@ -331,7 +308,7 @@ function ProjectionLine(props: any) {
       {hasTarget && !isDragging && yEnd !== null && (
         <line
           x1={x0} y1={y0} x2={xEnd} y2={yEnd}
-          stroke="#f59e0b" strokeWidth={2} strokeDasharray="7 4" opacity={0.9}
+          stroke="var(--color-accent)" strokeWidth={2} strokeDasharray="7 4" opacity={0.9}
           style={{ pointerEvents: 'none' }}
         />
       )}
@@ -339,7 +316,7 @@ function ProjectionLine(props: any) {
       {isDragging && dragSvgX != null && dragSvgY != null && (
         <line
           x1={x0} y1={y0} x2={dragSvgX} y2={dragSvgY}
-          stroke="#f59e0b" strokeWidth={2.5} strokeDasharray="7 4"
+          stroke="var(--color-accent)" strokeWidth={2.5} strokeDasharray="7 4"
           style={{ pointerEvents: 'none' }}
         />
       )}
@@ -349,31 +326,31 @@ function ProjectionLine(props: any) {
           transform={`translate(${xEnd}, ${yEnd})`}
           style={{ transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
         >
-          <circle r={13} fill="#fbbf24" />
+          <circle r={13} fill="var(--color-accent)" />
           <circle r={7} fill="white" />
-          <circle r={3} fill="#f59e0b" />
+          <circle r={3} fill="var(--color-accent)" />
           {saveStatus === 'saved' && (
-            <circle r={13} fill="none" stroke="#f59e0b" strokeWidth={2.5}>
+            <circle r={13} fill="none" stroke="var(--color-accent)" strokeWidth={2.5}>
               <animate attributeName="r" values="13;24;13" dur="0.6s" />
               <animate attributeName="opacity" values="0.9;0;0" dur="0.6s" />
             </circle>
           )}
-          <rect x={-32} y={-28} width={64} height={18} rx={4} fill="#f59e0b" />
-          <text x={0} y={-15} fill="white" fontSize={11} fontWeight="bold" textAnchor="middle">
+          <rect x={-32} y={-28} width={64} height={18} rx={4} fill="var(--color-accent)" />
+          <text x={0} y={-15} fill="var(--color-accent-dark)" fontSize={11} fontWeight="bold" textAnchor="middle">
             Goal: {(localTargetGpa as number).toFixed(1)}
           </text>
         </g>
       )}
 
       {(isHandleHovering || isDragging) && (
-        <circle cx={x0} cy={y0} r={16} fill="#fef3c7" opacity={0.55}
+        <circle cx={x0} cy={y0} r={16} fill="var(--color-accent)" opacity={0.15}
           style={{ pointerEvents: 'none' }} />
       )}
 
       <circle
         cx={x0} cy={y0} r={10}
         fill="transparent"
-        stroke={isHandleHovering ? '#f59e0b' : 'transparent'}
+        stroke={isHandleHovering ? 'var(--color-accent)' : 'transparent'}
         strokeWidth={2}
         style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
         onPointerDown={onHandlePointerDown}
@@ -383,7 +360,7 @@ function ProjectionLine(props: any) {
 
       {isHandleHovering && !isDragging && (
         <g transform={`translate(${x0}, ${y0 - 28})`}>
-          <rect x={-56} y={-16} width={112} height={18} rx={5} fill="#1e293b" />
+          <rect x={-56} y={-16} width={112} height={18} rx={5} fill="var(--color-primary-dark)" />
           <text x={0} y={-3} fill="white" fontSize={11} fontWeight="500" textAnchor="middle">
             Drag to set your goal
           </text>
@@ -392,8 +369,8 @@ function ProjectionLine(props: any) {
 
       {isDragging && pendingTargetGpa != null && dragSvgX != null && dragSvgY != null && (
         <g transform={`translate(${dragSvgX + 12}, ${dragSvgY - 20})`}>
-          <rect x={-4} y={-16} width={80} height={20} rx={5} fill="#f59e0b" />
-          <text x={36} y={-2} fill="white" fontSize={12} fontWeight="bold" textAnchor="middle">
+          <rect x={-4} y={-16} width={80} height={20} rx={5} fill="var(--color-accent)" />
+          <text x={36} y={-2} fill="var(--color-accent-dark)" fontSize={12} fontWeight="bold" textAnchor="middle">
             Goal: {pendingTargetGpa.toFixed(2)}
           </text>
         </g>
@@ -409,7 +386,7 @@ interface GradeSeries {
   latestWeek: number;
 }
 
-const gradeColors = ['#0f766e', '#9333ea', '#be123c', '#d97706', '#2563eb', '#047857'];
+const gradeColors = ['#1C7D6B', '#9333ea', '#be123c', '#d97706', '#2563eb', '#047857'];
 
 const parseGrade = (grade: string | null, gradePoints: number | null) => {
   if (!grade && gradePoints !== null) return gradePoints;
@@ -418,19 +395,17 @@ const parseGrade = (grade: string | null, gradePoints: number | null) => {
   return Number.isFinite(parsed) ? parsed : gradePoints;
 };
 
+const chartColors = {
+  grid: 'var(--color-border)',
+  axis: 'var(--color-text-muted)',
+  tooltipBg: 'var(--color-card)',
+  tooltipBorder: 'var(--color-border)',
+  tooltipText: 'var(--color-text-primary)',
+  tooltipItem: 'var(--color-text-secondary)',
+};
+
 export default function StudentView({ isStudentSelf = false }: { isStudentSelf?: boolean }) {
   const { id } = useParams();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
-
-  const chartColors = {
-    grid: isDark ? '#334155' : '#e2e8f0',
-    axis: isDark ? '#64748b' : '#94a3b8',
-    tooltipBg: isDark ? '#1e293b' : '#ffffff',
-    tooltipBorder: isDark ? '#334155' : '#e2e8f0',
-    tooltipText: isDark ? '#f1f5f9' : '#0f172a',
-    tooltipItem: isDark ? '#94a3b8' : '#64748b',
-  };
 
   const [student, setStudent] = useState<Student | null>(null);
   const [school, setSchool] = useState<School | null>(null);
@@ -661,17 +636,39 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
   }, [weekOneGpa, latestGpaPoint]);
 
   const gpaWithEffortSeries = useMemo(() => {
+    const absencesByWeek = new Map<number, number>();
+    attendance
+      .filter((r) => r.school_year === activeYear)
+      .forEach((r) => {
+        absencesByWeek.set(r.week_number, (absencesByWeek.get(r.week_number) ?? 0) + Number(r.absent_days));
+      });
     return studentGpaSeries.map((point) => {
       const a = selfAssessments.find(
         (s) => s.school_year === activeYear && s.week_number === point.week_number
       );
-      return { ...point, effort: a?.effort_rating ?? null };
+      const absences = absencesByWeek.has(point.week_number) ? absencesByWeek.get(point.week_number)! : null;
+      return { ...point, effort: a?.effort_rating ?? null, absences };
     });
-  }, [studentGpaSeries, selfAssessments, activeYear]);
+  }, [studentGpaSeries, selfAssessments, activeYear, attendance]);
 
   const hasEffortData = useMemo(
     () => gpaWithEffortSeries.filter((p) => p.effort !== null).length >= 2,
     [gpaWithEffortSeries]
+  );
+
+  const hasAttendanceData = useMemo(
+    () => attendance.filter((r) => r.school_year === activeYear).length >= 2,
+    [attendance, activeYear]
+  );
+
+  const latestAttendanceWeek = useMemo(
+    () => attendance.filter((r) => r.school_year === activeYear).reduce((max, r) => Math.max(max, r.week_number), 0),
+    [attendance, activeYear]
+  );
+
+  const hasAbsenceNote = useMemo(
+    () => attendance.some((r) => r.school_year === activeYear && Number(r.absent_days) >= 2),
+    [attendance, activeYear]
   );
 
   const celebration = useMemo<Celebration | null>(() => {
@@ -731,16 +728,12 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
   const getGradeCellClasses = (grade: number | null, previousGrade: number | null, weekIndex: number) => {
     const base = 'whitespace-nowrap px-4 py-4';
     if (weekIndex === 0 || grade === null || previousGrade === null) {
-      return `${base} text-slate-700 dark:text-slate-300`;
+      return `${base} text-[var(--color-text-primary)]`;
     }
     const delta = grade - previousGrade;
-    if (delta > 0) {
-      if (delta <= 4) return `${base} bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-400`;
-      if (delta <= 9) return `${base} bg-green-100 text-green-800 dark:bg-green-800/50 dark:text-green-300`;
-      return `${base} bg-green-200 text-green-900 font-semibold dark:bg-green-700/50 dark:text-green-200`;
-    }
-    if (delta < 0) return `${base} bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-400`;
-    return `${base} text-slate-700 dark:text-slate-300`;
+    if (delta > 0) return `${base} bg-[var(--color-green-highlight)] text-[#1a6b50]`;
+    if (delta < 0) return `${base} bg-[var(--color-red-highlight)] text-[#9B3535]`;
+    return `${base} text-[var(--color-text-primary)]`;
   };
 
   const gradeGraphData = useMemo(() => {
@@ -800,21 +793,15 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
       .sort((a, b) => (a.latestGrade! - b.latestGrade!))[0];
   }, [gradeRows]);
 
-  const totalAbsences = useMemo(() => {
-    return attendance.reduce((sum, row) => sum + Number(row.absent_days), 0);
-  }, [attendance]);
-
-  const currentWeekAbsences = useMemo(() => {
-    const latest = attendance.reduce((latestRow, row) => (row.week_number > latestRow.week_number ? row : latestRow), { week_number: 0, absent_days: 0 } as WeeklyAttendance);
-    return latest.absent_days ?? 0;
-  }, [attendance]);
+  // suppress unused warning — gpaGrowth may be used for future features
+  void gpaGrowth;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
         <div className="flex min-h-screen items-center justify-center px-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Loading student view…</p>
+          <div className="rounded-3xl p-8 shadow-sm" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
+            <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Loading student view…</p>
           </div>
         </div>
       </div>
@@ -823,12 +810,16 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
         <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-10 shadow-sm ring-1 ring-rose-200 dark:border-rose-800/50 dark:bg-rose-950/40 dark:ring-rose-800/50">
-            <p className="text-sm font-semibold text-rose-700 dark:text-rose-400">Unable to load student details</p>
-            <p className="mt-4 text-slate-700 dark:text-slate-300">{error}</p>
-            <Link to="/dashboard" className="mt-6 inline-flex rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300">
+          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-10 shadow-sm">
+            <p className="text-sm font-semibold text-rose-700">Unable to load student details</p>
+            <p className="mt-4" style={{ color: 'var(--color-text-primary)' }}>{error}</p>
+            <Link
+              to="/dashboard"
+              className="mt-6 inline-flex rounded-full px-5 py-3 text-sm font-semibold text-white transition"
+              style={{ background: 'var(--color-primary)' }}
+            >
               Back to dashboard
             </Link>
           </div>
@@ -852,32 +843,35 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
     );
   }
 
-  const celebrationGradient = celebration
-    ? (isDark ? celebrationGradients[celebration.colorScheme].dark : celebrationGradients[celebration.colorScheme].light)
-    : '';
-
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* ── Welcome header ── */}
-        <div className="flex flex-col gap-6 rounded-[2rem] bg-amber-50 p-8 shadow-sm ring-1 ring-amber-200 dark:bg-amber-950/30 dark:ring-amber-800/50 sm:flex-row sm:items-end sm:justify-between">
+        <div
+          className="flex flex-col gap-6 rounded-[2rem] p-8 shadow-sm sm:flex-row sm:items-end sm:justify-between"
+          style={{ background: 'var(--color-card-tint)', border: '1px solid var(--color-border)' }}
+        >
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-amber-700 dark:text-amber-400">Welcome</p>
-            <h1 className="mt-3 text-4xl font-semibold text-slate-900 dark:text-slate-100">Welcome, {student.first_name}!</h1>
-            <p className="mt-2 text-base text-slate-700 dark:text-slate-300">Week {currentWeekNumber} of {semesterWeeks}</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.28em]" style={{ color: 'var(--color-text-muted)' }}>Welcome</p>
+            <h1 className="mt-3 text-4xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Welcome, {student.first_name}!</h1>
+            <p className="mt-2 text-base" style={{ color: 'var(--color-text-secondary)' }}>Week {currentWeekNumber} of {semesterWeeks}</p>
           </div>
           <div className="flex items-center gap-3">
-            <ThemeToggle />
             {isStudentSelf ? (
               <button
                 type="button"
                 onClick={() => supabase.auth.signOut()}
-                className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-amber-100 dark:border-amber-700/50 dark:bg-amber-900/30 dark:text-slate-200 dark:hover:bg-amber-800/40"
+                className="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition"
+                style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-secondary)' }}
               >
                 Sign out
               </button>
             ) : (
-              <Link to="/" className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300">
+              <Link
+                to="/"
+                className="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white transition"
+                style={{ background: 'var(--color-primary)' }}
+              >
                 Back to dashboard
               </Link>
             )}
@@ -886,7 +880,10 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
 
         {/* ── Celebration banner ── */}
         {celebration && (
-          <div className={`mt-6 rounded-[2rem] bg-gradient-to-r ${celebrationGradient} px-7 py-8 text-white shadow-xl`}>
+          <div
+            className="mt-6 rounded-[2rem] px-7 py-8 text-white shadow-xl"
+            style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-dark))' }}
+          >
             <div className="flex items-start gap-5">
               <span className="text-4xl leading-none" role="img">{celebration.emoji}</span>
               <div>
@@ -898,17 +895,23 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
         )}
 
         {/* ── Highlights panel ── */}
-        <div className="mt-6 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-amber-100 dark:bg-slate-800 dark:ring-amber-800/30">
+        <div
+          className="mt-6 rounded-[2rem] p-6 shadow-sm"
+          style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}
+        >
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-700 dark:text-amber-400">Your highlights</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Your highlights</p>
             {shoutouts.length > 0 && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+              <span
+                className="rounded-full px-2 py-0.5 text-xs font-bold"
+                style={{ background: 'var(--color-card-tint)', color: 'var(--color-primary)', border: '1px solid var(--color-border)' }}
+              >
                 {shoutouts.length}
               </span>
             )}
           </div>
           {shoutouts.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+            <p className="mt-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
               Your advisor will add highlights here as the semester unfolds.
             </p>
           ) : (
@@ -922,16 +925,16 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
                     : weeksAgo === 1 ? 'Last week'
                     : `Week ${s.week_number}`;
                   return (
-                    <div key={s.id} className={`rounded-2xl ${cfg.bg} p-4 ring-1 ${cfg.ring}`}>
+                    <div key={s.id} className={`rounded-2xl border ${cfg.bg} ${cfg.border} p-4`}>
                       <div className="flex items-start gap-3">
                         <span className="text-2xl leading-none">{cfg.emoji}</span>
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-slate-900 dark:text-slate-100">{s.shoutout_text}</p>
+                          <p className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{s.shoutout_text}</p>
                           {s.personal_note && (
-                            <p className="mt-1 text-sm italic text-slate-600 dark:text-slate-300">"{s.personal_note}"</p>
+                            <p className="mt-1 text-sm italic" style={{ color: 'var(--color-text-secondary)' }}>"{s.personal_note}"</p>
                           )}
                           {timeLabel && (
-                            <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">{timeLabel}</p>
+                            <p className="mt-1.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>{timeLabel}</p>
                           )}
                         </div>
                       </div>
@@ -943,7 +946,8 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
                 <button
                   type="button"
                   onClick={() => setShowAllHighlights((prev) => !prev)}
-                  className="mt-4 text-sm font-semibold text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"
+                  className="mt-4 text-sm font-semibold transition"
+                  style={{ color: 'var(--color-primary)' }}
                 >
                   {showAllHighlights ? 'Show fewer' : `See all ${shoutouts.length} highlights`}
                 </button>
@@ -954,9 +958,12 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
 
         {/* ── Top grower banner ── */}
         {isTopGrower && (
-          <div className="mt-6 rounded-[2rem] border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 px-6 py-6 shadow-sm ring-2 ring-amber-200 dark:border-amber-600/70 dark:from-amber-900/40 dark:to-yellow-900/20 dark:ring-amber-700/40">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-400">Top grower this week</p>
-            <p className="mt-2 text-lg font-semibold text-amber-900 dark:text-amber-200">
+          <div
+            className="mt-6 rounded-[2rem] px-6 py-6 shadow-sm"
+            style={{ border: '2px solid var(--color-accent)', background: '#FFFBEB' }}
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--color-accent-dark)' }}>Top grower this week</p>
+            <p className="mt-2 text-lg font-semibold" style={{ color: 'var(--color-accent-dark)' }}>
               You had the highest GPA growth in the advisory this week. Keep it up!
             </p>
           </div>
@@ -964,20 +971,20 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
 
         {/* ── Three callout cards ── */}
         <div className="mt-8 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-[2rem] bg-emerald-50 p-6 shadow-sm ring-1 ring-emerald-200 dark:bg-emerald-950/30 dark:ring-emerald-800/50">
-            <p className="text-sm uppercase tracking-[0.3em] text-emerald-700 dark:text-emerald-400">Your best class so far</p>
-            <p className="mt-4 text-2xl font-semibold text-slate-900 dark:text-slate-100">{bestClass?.subject ?? 'No data yet'}</p>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Highest current-week grade across your classes.</p>
+          <div className="rounded-[2rem] p-6 shadow-sm" style={{ background: 'var(--color-card-tint)', border: '1px solid var(--color-border)' }}>
+            <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Your best class so far</p>
+            <p className="mt-4 text-2xl font-semibold" style={{ color: 'var(--color-primary)' }}>{bestClass?.subject ?? 'No data yet'}</p>
+            <p className="mt-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>Highest current-week grade across your classes.</p>
           </div>
-          <div className="rounded-[2rem] bg-amber-50 p-6 shadow-sm ring-1 ring-amber-200 dark:bg-amber-950/30 dark:ring-amber-800/50">
-            <p className="text-sm uppercase tracking-[0.3em] text-amber-800 dark:text-amber-300">Your biggest growth</p>
-            <p className="mt-4 text-2xl font-semibold text-slate-900 dark:text-slate-100">{biggestGrowth?.subject ?? 'No data yet'}</p>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Largest week-over-week grade increase this semester.</p>
+          <div className="rounded-[2rem] p-6 shadow-sm" style={{ background: '#FFFBEB', border: '1px solid var(--color-accent)' }}>
+            <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-accent-dark)' }}>Your biggest growth</p>
+            <p className="mt-4 text-2xl font-semibold" style={{ color: '#7a5e00' }}>{biggestGrowth?.subject ?? 'No data yet'}</p>
+            <p className="mt-2 text-sm" style={{ color: '#7a5e00', opacity: 0.8 }}>Largest week-over-week grade increase this semester.</p>
           </div>
-          <div className="rounded-[2rem] bg-rose-50 p-6 shadow-sm ring-1 ring-rose-200 dark:bg-rose-950/30 dark:ring-rose-800/50">
-            <p className="text-sm uppercase tracking-[0.3em] text-rose-700 dark:text-rose-400">Your biggest opportunity</p>
-            <p className="mt-4 text-2xl font-semibold text-slate-900 dark:text-slate-100">{biggestOpportunity?.subject ?? 'No data yet'}</p>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Lowest current-week grade to help focus on improvement.</p>
+          <div className="rounded-[2rem] p-6 shadow-sm" style={{ background: '#FFF5F5', border: '1px solid #f5b8b8' }}>
+            <p className="text-sm uppercase tracking-[0.3em]" style={{ color: '#9B3535' }}>Your biggest opportunity</p>
+            <p className="mt-4 text-2xl font-semibold" style={{ color: '#9B3535' }}>{biggestOpportunity?.subject ?? 'No data yet'}</p>
+            <p className="mt-2 text-sm" style={{ color: '#9B3535', opacity: 0.8 }}>Lowest current-week grade to help focus on improvement.</p>
           </div>
         </div>
 
@@ -996,30 +1003,34 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
         />
 
         {/* ── GPA chart ── */}
-        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+        <div
+          className="mt-8 rounded-[2rem] p-6 shadow-sm"
+          style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}
+        >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Weekly GPA</p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Your GPA trend</h3>
+              <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Weekly GPA</p>
+              <h3 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Your GPA trend</h3>
             </div>
             <div className="flex items-center gap-3">
               {saveStatus === 'pending' && (
                 <button
                   type="button"
                   onClick={() => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); saveTargetGpa(localTargetGpa); }}
-                  className="rounded-full bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-600"
+                  className="rounded-full px-4 py-1.5 text-xs font-semibold text-white transition"
+                  style={{ background: 'var(--color-accent)', color: 'var(--color-accent-dark)' }}
                 >
                   Save goal: {localTargetGpa.toFixed(1)}
                 </button>
               )}
               {saveStatus === 'saved' && (
-                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Goal saved!</span>
+                <span className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>Goal saved!</span>
               )}
               {saveStatus === 'idle' && (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                   {localTargetGpa > 0
-                    ? <>Goal: <span className="font-semibold text-amber-600 dark:text-amber-400">{localTargetGpa.toFixed(1)}</span></>
-                    : <span className="text-xs text-slate-400 dark:text-slate-500">Drag the endpoint to set your goal</span>
+                    ? <>Goal: <span className="font-semibold" style={{ color: 'var(--color-accent-dark)' }}>{localTargetGpa.toFixed(1)}</span></>
+                    : <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Drag the endpoint to set your goal</span>
                   }
                 </p>
               )}
@@ -1038,8 +1049,8 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
                 <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
                 <XAxis dataKey="week_number" tickFormatter={(value) => `W${value}`} tick={{ fill: chartColors.axis, fontSize: 12 }} />
                 <YAxis yAxisId="gpa" domain={[0, 4]} tick={{ fill: chartColors.axis, fontSize: 12 }} />
-                {hasEffortData && (
-                  <YAxis yAxisId="effort" orientation="right" domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tickFormatter={(v) => `${v}`} tick={{ fill: chartColors.axis, fontSize: 12 }} />
+                {(hasAttendanceData || hasEffortData) && (
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} tick={{ fill: chartColors.axis, fontSize: 12 }} />
                 )}
                 <Tooltip
                   formatter={(value: any, name: string) => [
@@ -1050,7 +1061,7 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
                   labelStyle={{ color: chartColors.tooltipText }}
                   itemStyle={{ color: chartColors.tooltipItem }}
                 />
-                {hasEffortData && <Legend />}
+                {(hasEffortData || hasAttendanceData) && <Legend />}
                 <Customized
                   component={ProjectionLine}
                   lastGpaPoint={latestGpaPoint}
@@ -1072,7 +1083,7 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
                   yAxisId="gpa"
                   type="monotone"
                   dataKey="gpa"
-                  stroke="#0f766e"
+                  stroke="var(--color-primary)"
                   strokeWidth={3}
                   dot={(props) => <AnimatedDot {...props} highlightWeek={latestGpaPoint?.week_number ?? 1} />}
                   activeDot={{ r: 8 }}
@@ -1082,78 +1093,117 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
                 />
                 {hasEffortData && (
                   <Line
-                    yAxisId="effort"
+                    yAxisId="right"
                     type="monotone"
                     dataKey="effort"
-                    stroke="#f59e0b"
+                    stroke="var(--color-accent)"
                     strokeWidth={2}
                     strokeDasharray="5 5"
-                    dot={{ r: 3, fill: '#f59e0b' }}
+                    dot={{ r: 3, fill: 'var(--color-accent)' }}
                     activeDot={{ r: 6 }}
                     connectNulls={false}
                     isAnimationActive={true}
                     name="Effort"
                   />
                 )}
+                {hasAttendanceData && (
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="absences"
+                    stroke="#E05C38"
+                    strokeWidth={2}
+                    strokeDasharray="5 4"
+                    dot={(props) => <AnimatedDot {...props} highlightWeek={latestAttendanceWeek} />}
+                    activeDot={{ r: 6 }}
+                    connectNulls={false}
+                    isAnimationActive={true}
+                    name="Weekly absences"
+                  />
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>
+          {hasAbsenceNote && (
+            <p className="mt-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              Attendance and GPA often move together — weeks with more absences can affect your grades.
+            </p>
+          )}
         </div>
 
         {/* ── Path to target ── */}
         {pathToTarget && pathToTarget.recommendations.length > 0 && (
-          <div className="mt-6 rounded-[2rem] bg-gradient-to-br from-amber-50 to-orange-50 p-6 shadow-sm ring-1 ring-amber-200 dark:from-amber-950/30 dark:to-orange-950/20 dark:ring-amber-800/50">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-700 dark:text-amber-400">Your path to {localTargetGpa.toFixed(1)}</p>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              Gap to close: <span className="font-semibold text-slate-800 dark:text-slate-200">{Math.abs(pathToTarget.gapToClose).toFixed(2)} GPA points</span>
+          <div
+            className="mt-6 rounded-[2rem] p-6 shadow-sm"
+            style={{ background: '#FFFBEB', border: '1px solid var(--color-accent)' }}
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--color-accent-dark)' }}>Your path to {localTargetGpa.toFixed(1)}</p>
+            <p className="mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+              Gap to close: <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{Math.abs(pathToTarget.gapToClose).toFixed(2)} GPA points</span>
             </p>
             <div className="mt-4 space-y-3">
               {pathToTarget.recommendations.map((rec, i) => (
-                <div key={rec.className} className="flex items-start gap-4 rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-amber-100 dark:bg-slate-800 dark:ring-amber-800/30">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+                <div
+                  key={rec.className}
+                  className="flex items-start gap-4 rounded-2xl px-4 py-4 shadow-sm"
+                  style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}
+                >
+                  <span
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                    style={{ background: 'var(--color-accent)', color: 'var(--color-accent-dark)' }}
+                  >
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-semibold text-slate-900 dark:text-slate-100">{rec.className}</span>
-                      <span className="text-sm text-slate-500 dark:text-slate-400">
-                        {rec.currentGrade} → <span className="font-semibold text-amber-700 dark:text-amber-400">{rec.targetGrade}</span>
+                      <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{rec.className}</span>
+                      <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                        {rec.currentGrade} → <span className="font-semibold" style={{ color: 'var(--color-accent-dark)' }}>{rec.targetGrade}</span>
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{rec.reason}</p>
+                    <p className="mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{rec.reason}</p>
                   </div>
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+            <p className="mt-4 text-xs" style={{ color: 'var(--color-text-muted)' }}>
               If you hit these targets, your GPA will land right where you want it by Week {semesterWeeks}.
             </p>
           </div>
         )}
 
         {/* ── Grade table ── */}
-        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+        <div
+          className="mt-8 rounded-[2rem] p-6 shadow-sm"
+          style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}
+        >
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Class grades</p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Weekly grade table</h3>
+              <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Class grades</p>
+              <h3 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Weekly grade table</h3>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Showing Week 1 through Week {Math.max(1, ...weeklyGrades.map((row) => row.week_number))}</p>
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Showing Week 1 through Week {Math.max(1, ...weeklyGrades.map((row) => row.week_number))}</p>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-slate-700">
+            <table className="min-w-full text-left text-sm" style={{ borderTop: '1px solid var(--color-border)' }}>
               <thead>
-                <tr>
-                  <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Subject</th>
+                <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>Subject</th>
                   {Array.from({ length: Math.max(1, ...weeklyGrades.map((row) => row.week_number)) }, (_, index) => (
-                    <th key={index} className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">W{index + 1}</th>
+                    <th key={index} className="whitespace-nowrap px-4 py-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>W{index + 1}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                {gradeRows.map((row) => (
-                  <tr key={row.classId} className="bg-slate-50 dark:bg-slate-700/40">
-                    <td className="whitespace-nowrap px-4 py-4 font-medium text-slate-900 dark:text-slate-100">{row.subject}</td>
+              <tbody>
+                {gradeRows.map((row, rowIdx) => (
+                  <tr
+                    key={row.classId}
+                    style={{
+                      background: rowIdx % 2 === 0 ? 'var(--color-card)' : 'var(--color-card-tint)',
+                      borderBottom: '1px solid var(--color-border)',
+                    }}
+                  >
+                    <td className="whitespace-nowrap px-4 py-4 font-medium" style={{ color: 'var(--color-text-primary)' }}>{row.subject}</td>
                     {row.weekGrades.map((grade, index) => {
                       const previousGrade = index > 0 ? row.weekGrades[index - 1] : null;
                       return (
@@ -1170,11 +1220,14 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
         </div>
 
         {/* ── Class grade trends chart ── */}
-        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+        <div
+          className="mt-8 rounded-[2rem] p-6 shadow-sm"
+          style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}
+        >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Class grade trends</p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Subject performance over time</h3>
+              <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Class grade trends</p>
+              <h3 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Subject performance over time</h3>
             </div>
           </div>
           <div className="mt-6 h-96">
@@ -1209,25 +1262,6 @@ export default function StudentView({ isStudentSelf = false }: { isStudentSelf?:
           </div>
         </div>
 
-        {/* ── Attendance ── */}
-        <div className="mt-8 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Attendance summary</p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Absences to date</h3>
-            </div>
-          </div>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-3xl bg-slate-50 p-6 dark:bg-slate-700/50">
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Total absences</p>
-              <p className="mt-3 text-4xl font-semibold text-slate-900 dark:text-slate-100">{totalAbsences}</p>
-            </div>
-            <div className="rounded-3xl bg-slate-50 p-6 dark:bg-slate-700/50">
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Absences this week</p>
-              <p className="mt-3 text-4xl font-semibold text-slate-900 dark:text-slate-100">{currentWeekAbsences}</p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

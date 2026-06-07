@@ -1,6 +1,5 @@
 import { FormEvent, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import ThemeToggle from './ThemeToggle';
 
 export default function LoginForm() {
   const [email, setEmail] = useState('');
@@ -14,77 +13,162 @@ export default function LoginForm() {
     setError(null);
     setMessage(null);
     setLoading(true);
-
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-
     if (error) {
       setError(error.message);
     } else {
       setMessage('Signed in successfully. Redirecting...');
     }
-
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-12 dark:bg-slate-950 sm:px-6 lg:px-8">
-      <div className="flex justify-end px-2 pb-4">
-        <ThemeToggle />
-      </div>
-      <div className="mx-auto w-full max-w-md rounded-3xl bg-white p-8 shadow-xl ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
-        <div className="mb-8 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">The Kitchen Table</p>
-          <h1 className="mt-3 text-3xl font-semibold text-slate-900 dark:text-slate-100">Sign in</h1>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Sign in with your school credentials.</p>
+    <div className="flex min-h-screen flex-col md:flex-row">
+
+      {/* ── Left panel — brand ── */}
+      <div className="flex flex-col md:w-1/2" style={{ background: '#1B3A5C' }}>
+
+        {/* Wordmark — always visible */}
+        <div className="flex items-center px-6 py-5 md:px-10 md:py-8">
+          <img
+            src="/Logo/PerchEd%20Logo%20Design-clear.png"
+            alt="PerchEd"
+            style={{ height: 28, width: 'auto', objectFit: 'contain' }}
+          />
         </div>
 
-        <form className="space-y-6" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Email address
-            </label>
-            <div className="mt-2">
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                className="block w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:focus:border-slate-500 dark:focus:ring-slate-600"
-              />
-            </div>
-          </div>
+        {/* Mobile-only: compact headline */}
+        <div className="px-6 pb-7 md:hidden">
+          <p className="text-lg font-semibold leading-snug text-white">
+            Every student has a story worth knowing.
+          </p>
+        </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Password
-            </label>
-            <div className="mt-2">
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                className="block w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:focus:border-slate-500 dark:focus:ring-slate-600"
-              />
-            </div>
+        {/* Desktop-only: mascot + headline + subheadline */}
+        <div className="hidden flex-1 flex-col items-center justify-center px-10 pb-6 md:flex">
+          <div style={{ width: 280, height: 280, background: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <img
+              src="/mascots/mascots-welcome.png"
+              alt="The Kitchen Table mascot"
+              style={{ width: 260, objectFit: 'contain' }}
+            />
           </div>
+          <h1 className="mt-8 text-center text-[2rem] font-bold leading-snug text-white">
+            Every student has a story worth knowing.
+          </h1>
+          <p className="mt-4 max-w-sm text-center text-base leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)' }}>
+            PerchEd gives advisory teachers the data and conversations that help students thrive.
+          </p>
+        </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex w-full justify-center rounded-3xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300 dark:disabled:bg-slate-600 dark:disabled:text-slate-400"
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
+        {/* Desktop-only: proof points */}
+        <div
+          className="hidden px-10 py-6 md:block"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.12)' }}
+        >
+          <div className="flex justify-between gap-4">
+            {[
+              { icon: '📈', label: 'Semester-long trajectory' },
+              { icon: '🌟', label: 'Asset-based advising' },
+              { icon: '🤖', label: 'AI-powered insights' },
+            ].map(({ icon, label }) => (
+              <div key={label} className="flex flex-1 flex-col items-center gap-1.5 text-center">
+                <span className="text-xl">{icon}</span>
+                <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  {label}
+                </span>
+              </div>
+            ))}
           </div>
-
-          {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-          {message ? <p className="text-sm text-emerald-600 dark:text-emerald-400">{message}</p> : null}
-        </form>
+        </div>
       </div>
+
+      {/* ── Right panel — form ── */}
+      <div className="flex flex-1 flex-col" style={{ background: '#FEFDF9' }}>
+
+        {/* Form — vertically centered */}
+        <div className="flex flex-1 items-center justify-center px-8 py-12">
+          <div className="w-full max-w-sm">
+            <div className="mb-8">
+              <h2 className="text-2xl font-semibold" style={{ color: '#1B3A5C' }}>Welcome back</h2>
+              <p className="mt-1.5 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                Sign in to your account
+              </p>
+            </div>
+
+            <form className="space-y-5" onSubmit={handleSubmit}>
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                  Email address
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="mt-2 block w-full rounded-2xl px-4 py-3 text-sm outline-none transition"
+                  style={{
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-card)',
+                    color: 'var(--color-text-primary)',
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 2px rgba(28,125,107,0.15)'; }}
+                  onBlur={(e) => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = 'none'; }}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="mt-2 block w-full rounded-2xl px-4 py-3 text-sm outline-none transition"
+                  style={{
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-card)',
+                    color: 'var(--color-text-primary)',
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 2px rgba(28,125,107,0.15)'; }}
+                  onBlur={(e) => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = 'none'; }}
+                />
+              </div>
+
+              {error && <p className="text-sm text-rose-600">{error}</p>}
+              {message && <p className="text-sm font-medium" style={{ color: 'var(--color-primary)' }}>{message}</p>}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-2xl px-4 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: 'var(--color-primary)' }}
+              >
+                {loading ? 'Signing in…' : 'Sign in'}
+              </button>
+            </form>
+
+            <p className="mt-7 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              New to PerchEd?{' '}
+              <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                Contact your school administrator.
+              </span>
+            </p>
+          </div>
+        </div>
+
+        {/* Bottom tagline */}
+        <div className="px-8 pb-5 pt-2 text-center">
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            Trusted by advisory teachers across Arkansas.
+          </p>
+        </div>
+      </div>
+
     </div>
   );
 }

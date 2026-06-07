@@ -13,3 +13,6 @@ pnpm-lock.yaml
 
 # Local Netlify folder
 .netlify
+
+# Claude Code memory
+.claude/
