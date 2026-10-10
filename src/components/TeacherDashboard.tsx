@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
+import { Line, LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
 import AnimatedDot from './AnimatedDot';
@@ -100,6 +100,34 @@ const acctInputStyle: React.CSSProperties = {
   marginTop: '0.25rem',
   outline: 'none',
 };
+
+function CombinedChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload || payload.length === 0) return null;
+  const gpaEntry = payload.find((p: any) => p.dataKey === 'avg_gpa');
+  const absEntry = payload.find((p: any) => p.dataKey === 'avg_absences');
+  return (
+    <div style={{
+      background: 'var(--color-card)',
+      border: '1px solid var(--color-border)',
+      borderRadius: 8,
+      padding: '10px 14px',
+      fontSize: 13,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    }}>
+      <p style={{ fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 6px' }}>Week {label}</p>
+      {gpaEntry?.value != null && (
+        <p style={{ color: '#1C7D6B', margin: '3px 0' }}>
+          Avg GPA: <strong>{Number(gpaEntry.value).toFixed(2)}</strong>
+        </p>
+      )}
+      {absEntry?.value != null && (
+        <p style={{ color: '#7a5e00', margin: '3px 0' }}>
+          Avg absences: <strong>{Number(absEntry.value).toFixed(1)}</strong>
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function TeacherDashboard({ user }: TeacherDashboardProps) {
   const [school, setSchool] = useState<School | null>(null);
@@ -433,6 +461,13 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
     const weeks = attendanceChartData.filter((point) => point.avg_absences !== null).map((point) => point.week_number);
     return weeks.length > 0 ? Math.max(...weeks) : 1;
   }, [attendanceChartData]);
+
+  const combinedChartData = useMemo(() => {
+    return gpaChartData.map((gpaPoint, index) => ({
+      ...gpaPoint,
+      avg_absences: attendanceChartData[index]?.avg_absences ?? null,
+    }));
+  }, [gpaChartData, attendanceChartData]);
 
   const studentSummaries = useMemo<StudentGrowth[]>(() => {
     const summaries = students.map((student) => {
@@ -773,30 +808,6 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           <p className="mt-1 max-w-2xl text-sm" style={{ color: 'var(--color-text-secondary)' }}>Monitor advisory classes, student progress, weekly attendance, and GPA snapshots.</p>
         </div>
 
-        {advisoryClasses.length > 1 && (
-          <div className="mb-6 flex flex-wrap gap-2">
-            {advisoryClasses.map((cls) => (
-              <button
-                key={cls.id}
-                type="button"
-                onClick={() => {
-                  setSelectedClassId(cls.id);
-                  setPanelMode('none');
-                  setEditingStudent(null);
-                }}
-                className="rounded-full px-4 py-2 text-sm font-semibold transition"
-                style={
-                  selectedClassId === cls.id
-                    ? { background: 'var(--color-primary)', color: '#ffffff' }
-                    : { border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-text-secondary)' }
-                }
-              >
-                {cls.name}
-              </button>
-            ))}
-          </div>
-        )}
-
         {error ? (
           <div className="mb-6 rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>
         ) : null}
@@ -859,89 +870,97 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
           </div>
         ) : null}
 
-        {/* ── Charts ── */}
-        <section className="mt-8 grid gap-4 xl:grid-cols-2">
-          <div className="rounded-3xl p-6 shadow-sm" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Class GPA</p>
-                <h2 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Semester trend</h2>
-              </div>
-              <span
-                className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.26em]"
-                style={{ background: 'var(--color-card-tint)', color: 'var(--color-text-secondary)' }}
-              >
-                {activeYear || 'No year'}
-              </span>
+        {/* ── Combined chart card ── */}
+        <section className="mt-6 rounded-lg" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
+          <div className="flex flex-wrap items-start justify-between gap-4 px-6 pt-6">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-muted)', letterSpacing: '0.12em' }}>
+                Class overview
+              </p>
+              <h2 className="mt-1 text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                Semester trend
+              </h2>
             </div>
-            <div className="mt-6 h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={gpaChartData}>
-                  <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
-                  <XAxis dataKey="week_number" tickFormatter={(v) => `W${v}`} tick={{ fill: chartColors.axis, fontSize: 12 }} />
-                  <YAxis domain={[0, 4]} tick={{ fill: chartColors.axis, fontSize: 12 }} />
-                  <Tooltip
-                    formatter={(value: any) => (typeof value === 'number' ? value.toFixed(2) : value)}
-                    contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder, color: chartColors.tooltipText, borderRadius: 12 }}
-                    labelStyle={{ color: chartColors.tooltipText }}
-                    itemStyle={{ color: chartColors.tooltipItem }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="avg_gpa"
-                    stroke="var(--color-primary)"
-                    strokeWidth={3}
-                    dot={(props) => <AnimatedDot {...props} highlightWeek={latestGpaWeek} />}
-                    activeDot={{ r: 8 }}
-                    connectNulls={false}
-                    isAnimationActive={true}
-                    name="Avg GPA"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {advisoryClasses.length > 1 && (
+                <div className="flex overflow-hidden" style={{ border: '1px solid var(--color-border)', borderRadius: 6 }}>
+                  {advisoryClasses.map((cls) => (
+                    <button
+                      key={cls.id}
+                      type="button"
+                      onClick={() => { setSelectedClassId(cls.id); setPanelMode('none'); setEditingStudent(null); }}
+                      className="px-4 py-1.5 text-sm font-medium transition"
+                      style={
+                        selectedClassId === cls.id
+                          ? { background: 'var(--color-primary)', color: '#ffffff' }
+                          : { background: 'transparent', color: 'var(--color-text-secondary)' }
+                      }
+                    >
+                      {cls.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {activeYear && (
+                <span
+                  className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
+                  style={{ background: 'var(--color-card-tint)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
+                >
+                  {activeYear}
+                </span>
+              )}
             </div>
           </div>
 
-          <div className="rounded-3xl p-6 shadow-sm" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm uppercase tracking-[0.3em]" style={{ color: 'var(--color-text-muted)' }}>Class absences</p>
-                <h2 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>Average weekly absences</h2>
-              </div>
-              <span
-                className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.26em]"
-                style={{ background: 'var(--color-card-tint)', color: 'var(--color-text-secondary)' }}
-              >
-                Semester width
-              </span>
-            </div>
-            <div className="mt-6 h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={attendanceChartData}>
-                  <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
-                  <XAxis dataKey="week_number" tickFormatter={(v) => `W${v}`} tick={{ fill: chartColors.axis, fontSize: 12 }} />
-                  <YAxis allowDecimals={false} tick={{ fill: chartColors.axis, fontSize: 12 }} />
-                  <Tooltip
-                    formatter={(value: any) => (typeof value === 'number' ? value.toFixed(2) : value)}
-                    contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder, color: chartColors.tooltipText, borderRadius: 12 }}
-                    labelStyle={{ color: chartColors.tooltipText }}
-                    itemStyle={{ color: chartColors.tooltipItem }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="avg_absences"
-                    stroke="var(--color-accent)"
-                    strokeWidth={3}
-                    dot={(props) => <AnimatedDot {...props} highlightWeek={latestAttendanceWeek} />}
-                    activeDot={{ r: 8 }}
-                    connectNulls={false}
-                    isAnimationActive={true}
-                    name="Avg absences"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+          <div className="px-6 pb-2 mt-6 h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={combinedChartData} margin={{ top: 4, right: 40, bottom: 4, left: 4 }}>
+                <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
+                <XAxis dataKey="week_number" tickFormatter={(v) => `W${v}`} tick={{ fill: chartColors.axis, fontSize: 12 }} />
+                <YAxis
+                  yAxisId="gpa"
+                  domain={[0, 4]}
+                  tickFormatter={(v) => v.toFixed(1)}
+                  tick={{ fill: chartColors.axis, fontSize: 12 }}
+                />
+                <YAxis
+                  yAxisId="absences"
+                  orientation="right"
+                  domain={[0, 5]}
+                  ticks={[0, 1, 2, 3, 4, 5]}
+                  tick={{ fill: chartColors.axis, fontSize: 12 }}
+                />
+                <Tooltip content={<CombinedChartTooltip />} />
+                <Legend wrapperStyle={{ paddingTop: 12, fontSize: 13, color: 'var(--color-text-secondary)' }} />
+                <Line
+                  yAxisId="gpa"
+                  type="monotone"
+                  dataKey="avg_gpa"
+                  stroke="var(--color-primary)"
+                  strokeWidth={3}
+                  dot={(props) => <AnimatedDot {...props} highlightWeek={latestGpaWeek} />}
+                  activeDot={{ r: 8 }}
+                  connectNulls={false}
+                  isAnimationActive={true}
+                  name="Avg class GPA"
+                />
+                <Line
+                  yAxisId="absences"
+                  type="monotone"
+                  dataKey="avg_absences"
+                  stroke="var(--color-accent)"
+                  strokeWidth={2.5}
+                  strokeDasharray="6 3"
+                  dot={(props) => <AnimatedDot {...props} highlightWeek={latestAttendanceWeek} />}
+                  activeDot={{ r: 7 }}
+                  connectNulls={false}
+                  isAnimationActive={true}
+                  name="Avg weekly absences"
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
+          <div className="px-6 pb-4" />
         </section>
 
         {/* ── Student growth list ── */}

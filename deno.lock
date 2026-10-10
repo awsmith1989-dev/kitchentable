@@ -17,6 +17,7 @@
         "npm:@types/react@^18.3.3",
         "npm:@vitejs/plugin-react@^4.3.2",
         "npm:autoprefixer@^10.4.19",
+        "npm:lucide-react@^1.17.0",
         "npm:netlify-cli@^26.1.0",
         "npm:papaparse@^5.4.1",
         "npm:postcss@^8.4.35",
